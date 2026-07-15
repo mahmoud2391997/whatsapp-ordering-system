@@ -304,7 +304,26 @@ function OverviewSection({
 /* ── Orders ── */
 function OrdersSection({ orders }: { orders: Order[] }) {
   const [filter, setFilter] = useState<OrderStatus | 'all'>('all');
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirmMsg, setConfirmMsg] = useState('');
   const filtered = filter === 'all' ? orders : orders.filter(o => o.status === filter);
+
+  const handleConfirmOrder = async (orderId: string) => {
+    try {
+      const res = await fetch('/api/confirm-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, message: '' }),
+      });
+      if (res.ok) {
+        setConfirmingId(null);
+        setConfirmMsg('');
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error('Failed to confirm order:', err);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -337,6 +356,7 @@ function OrdersSection({ orders }: { orders: Order[] }) {
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Payment</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-right">Total</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -373,6 +393,16 @@ function OrdersSection({ orders }: { orders: Order[] }) {
                       }`}>{order.payment_status.replace('_', ' ').toUpperCase()}</span>
                     </td>
                     <td className="px-4 py-3.5 text-right font-bold text-gray-900">{order.total.toLocaleString()} EGP</td>
+                    <td className="px-4 py-3.5 text-right">
+                      {order.status === 'pending' && (
+                        <button
+                          onClick={() => setConfirmingId(order.id)}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors font-medium"
+                        >
+                          Confirm
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -380,6 +410,41 @@ function OrdersSection({ orders }: { orders: Order[] }) {
           </table>
         </div>
       </div>
+
+      {/* Confirmation modal */}
+      {confirmingId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="font-bold text-gray-900 text-lg mb-2">Confirm Order</h3>
+            <p className="text-gray-500 text-sm mb-6">
+              A professional confirmation message will be sent to the customer via WhatsApp using our order confirmation template.
+            </p>
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-emerald-800">
+                <span className="font-semibold">Order ID:</span> {confirmingId}
+              </p>
+              <p className="text-xs text-emerald-700 mt-2">
+                Template: jaspers_market_order_confirmation_v1
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmingId(null)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleConfirmOrder(confirmingId)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                Confirm & Notify
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -749,6 +814,168 @@ function IntegrationsSection() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Menu Pages ── */
+function MenuPagesSection({ menuPages }: { menuPages: MenuPage[] }) {
+  const [showCreate, setShowCreate] = useState(false);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [customerType, setCustomerType] = useState<CustomerType>('retail');
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [createdSlug, setCreatedSlug] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [pages, setPages] = useState<MenuPage[]>(menuPages);
+
+  useEffect(() => { setPages(menuPages); }, [menuPages]);
+
+  const handleCreate = async () => {
+    if (!name || !phone) { setError('Name and phone are required'); return; }
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/menu-pages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerName: name, phone, customerType }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to create');
+      setCreatedSlug(data.menuPage.slug);
+      setPages(prev => [data.menuPage, ...prev.filter(p => p.id !== data.menuPage.id)]);
+      setName(''); setPhone(''); setCustomerType('retail');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const copyUrl = (slug: string) => {
+    const url = `${window.location.origin}/menu/${slug}`;
+    navigator.clipboard.writeText(url);
+    setCopied(slug);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Menu Pages</h1>
+          <p className="text-gray-500 text-sm mt-0.5">Unique menu page for each customer — orders go straight to WhatsApp</p>
+        </div>
+        <button
+          onClick={() => setShowCreate(!showCreate)}
+          className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+        >
+          {showCreate ? <X className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+          {showCreate ? 'Cancel' : 'New Menu Page'}
+        </button>
+      </div>
+
+      {/* Create form */}
+      {showCreate && (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <h3 className="font-semibold text-gray-900 mb-4">Create Customer Menu Page</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Customer Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Ahmed Hassan"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Phone (WhatsApp)</label>
+              <input
+                type="text"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                placeholder="+20 100 123 4567"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Customer Type</label>
+              <select
+                value={customerType}
+                onChange={e => setCustomerType(e.target.value as CustomerType)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="retail">Retail</option>
+                <option value="shop">Shop</option>
+                <option value="restaurant">Restaurant</option>
+              </select>
+            </div>
+          </div>
+          {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
+          {createdSlug && (
+            <div className="mt-3 bg-emerald-50 rounded-lg p-3 flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+              <code className="text-sm text-emerald-700 flex-1 truncate">/menu/{createdSlug}</code>
+              <button onClick={() => copyUrl(createdSlug)} className="text-emerald-600 hover:text-emerald-800 transition-colors shrink-0">
+                {copied === createdSlug ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              </button>
+            </div>
+          )}
+          <button
+            onClick={handleCreate}
+            disabled={creating}
+            className="mt-4 flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
+          >
+            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Create Page
+          </button>
+        </div>
+      )}
+
+      {/* Menu pages list */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+        <div className="px-5 py-4 border-b border-gray-50">
+          <h2 className="font-semibold text-gray-900">All Menu Pages ({pages.length})</h2>
+        </div>
+        {pages.length === 0 ? (
+          <div className="px-5 py-12 text-center text-gray-400">
+            <Link2 className="w-10 h-10 mx-auto mb-3 opacity-50" />
+            <p className="text-sm">No menu pages yet. Create one to give a customer their own ordering page.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {pages.map(page => (
+              <div key={page.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50/50 transition-colors">
+                <div className="w-9 h-9 bg-emerald-100 rounded-lg flex items-center justify-center shrink-0">
+                  <Link2 className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-medium text-gray-900 truncate">{page.customer_name}</h3>
+                  <p className="text-xs text-gray-500">{page.phone} · {page.customer_type}</p>
+                </div>
+                <div className="hidden sm:flex items-center gap-2">
+                  <code className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded">/menu/{page.slug}</code>
+                  <button onClick={() => copyUrl(page.slug)} className="text-gray-400 hover:text-gray-700 transition-colors">
+                    {copied === page.slug ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <a
+                  href={`/menu/${page.slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-600 hover:text-emerald-800 transition-colors shrink-0"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

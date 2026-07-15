@@ -13,8 +13,7 @@ interface CartItem {
 }
 
 interface CheckoutBody {
-  customerName: string;
-  phone: string;
+  customerId: string;
   items: CartItem[];
   total: number;
   customerType?: string;
@@ -26,14 +25,26 @@ export async function POST(req: Request) {
   const supabase = createServerClient();
   const body: CheckoutBody = await req.json().catch(() => null);
 
-  if (!body || !body.customerName || !body.phone || !body.items?.length) {
+  if (!body || !body.customerId || !body.items?.length) {
     return NextResponse.json(
-      { error: 'customerName, phone and items are required' },
+      { error: 'customerId and items are required' },
       { status: 400 },
     );
   }
 
-  const customerType = body.customerType ?? 'retail';
+  // Fetch the menu page to get customer info
+  const { data: menuPage, error: pageError } = await supabase
+    .from('menu_pages')
+    .select('*')
+    .eq('id', body.customerId)
+    .maybeSingle();
+
+  if (pageError || !menuPage) {
+    return NextResponse.json(
+      { error: 'Menu page not found for this customer ID' },
+      { status: 404 },
+    );
+  }
 
   // Create the order
   const orderId = `ORD-${Date.now().toString().slice(-6)}`;
