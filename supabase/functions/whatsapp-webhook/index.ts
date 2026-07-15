@@ -204,7 +204,7 @@ Deno.serve(async (req: Request) => {
       });
 
       // Send reply via WhatsApp API
-      await fetch(`https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`, {
+      await fetch(`https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${WHATSAPP_TOKEN}`,
