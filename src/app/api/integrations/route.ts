@@ -26,6 +26,11 @@ export async function GET() {
     'HYPERPAY_URL',
     'HYPERPAY_ACCESS_TOKEN',
     'HYPERPAY_ENTITY_ID',
+    'GEIDEA_MERCHANT_PUBLIC_KEY',
+    'GEIDEA_API_PASSWORD',
+    'GEIDEA_API_URL',
+    'TAMARA_API_TOKEN',
+    'TAMARA_API_URL',
     'SENDGRID_API_KEY',
     'CLOUDINARY_CLOUD_NAME',
     'CLOUDINARY_API_KEY',
@@ -37,9 +42,11 @@ export async function GET() {
   }
 
   // Fetch webhook events and system logs for health metrics
-  const [whatsappEvents, hyperpayEvents, recentLogs, txnCount] = await Promise.all([
+  const [whatsappEvents, hyperpayEvents, geideaEvents, tamaraEvents, recentLogs, txnCount] = await Promise.all([
     supabase.from('webhook_events').select('created_at, processed').eq('source', 'whatsapp').order('created_at', { ascending: false }).limit(50),
     supabase.from('webhook_events').select('created_at, processed').eq('source', 'hyperpay').order('created_at', { ascending: false }).limit(50),
+    supabase.from('webhook_events').select('created_at, processed').eq('source', 'geidea').order('created_at', { ascending: false }).limit(50),
+    supabase.from('webhook_events').select('created_at, processed').eq('source', 'tamara').order('created_at', { ascending: false }).limit(50),
     supabase.from('system_logs').select('level, service, created_at').order('created_at', { ascending: false }).limit(20),
     supabase.from('transactions').select('id', { count: 'exact', head: true }),
   ]);
@@ -47,6 +54,8 @@ export async function GET() {
   const whatsappConfigured = !!(env.WHATSAPP_ACCESS_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID && env.WHATSAPP_VERIFY_TOKEN);
   const geminiConfigured = !!env.GEMINI_API_KEY;
   const hyperpayConfigured = !!(env.HYPERPAY_URL && env.HYPERPAY_ACCESS_TOKEN && env.HYPERPAY_ENTITY_ID);
+  const geideaConfigured = !!(env.GEIDEA_MERCHANT_PUBLIC_KEY && env.GEIDEA_API_PASSWORD);
+  const tamaraConfigured = !!env.TAMARA_API_TOKEN;
   const sendgridConfigured = !!env.SENDGRID_API_KEY;
   const cloudinaryConfigured = !!(env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY);
 
@@ -79,6 +88,26 @@ export async function GET() {
       webhookUrl: hyperpayConfigured ? `${supabaseUrl}/functions/v1/hyperpay-webhook` : undefined,
       lastEvent: hyperpayEvents.data?.[0]?.created_at ?? null,
       eventCount: hyperpayEvents.data?.length ?? 0,
+    },
+    {
+      name: 'Geidea Payments',
+      service: 'geidea',
+      configured: geideaConfigured,
+      status: geideaConfigured ? 'operational' : 'pending',
+      description: 'Geidea checkout — card payments for Saudi, Egypt & UAE',
+      webhookUrl: geideaConfigured ? `${supabaseUrl}/functions/v1/geidea-webhook` : undefined,
+      lastEvent: geideaEvents.data?.[0]?.created_at ?? null,
+      eventCount: geideaEvents.data?.length ?? 0,
+    },
+    {
+      name: 'Tamara BNPL',
+      service: 'tamara',
+      configured: tamaraConfigured,
+      status: tamaraConfigured ? 'operational' : 'pending',
+      description: 'Buy Now Pay Later — 3 instalments for your customers',
+      webhookUrl: tamaraConfigured ? `${supabaseUrl}/functions/v1/tamara-webhook` : undefined,
+      lastEvent: tamaraEvents.data?.[0]?.created_at ?? null,
+      eventCount: tamaraEvents.data?.length ?? 0,
     },
     {
       name: 'SendGrid Email',
@@ -128,6 +157,10 @@ export async function GET() {
       { name: 'gemini-parse', url: `${supabaseUrl}/functions/v1/gemini-parse` },
       { name: 'hyperpay-webhook', url: `${supabaseUrl}/functions/v1/hyperpay-webhook` },
       { name: 'create-payment', url: `${supabaseUrl}/functions/v1/create-payment` },
+      { name: 'create-geidea-session', url: `${supabaseUrl}/functions/v1/create-geidea-session` },
+      { name: 'geidea-webhook', url: `${supabaseUrl}/functions/v1/geidea-webhook` },
+      { name: 'create-tamara-order', url: `${supabaseUrl}/functions/v1/create-tamara-order` },
+      { name: 'tamara-webhook', url: `${supabaseUrl}/functions/v1/tamara-webhook` },
       { name: 'send-email', url: `${supabaseUrl}/functions/v1/send-email` },
     ],
     recentLogs: recentLogs.data ?? [],

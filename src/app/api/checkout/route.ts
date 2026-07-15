@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
+import type { PaymentMethod } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,7 @@ interface CheckoutBody {
   total: number;
   customerType?: string;
   location?: string;
-  paymentMethod?: 'cod' | 'online';
+  paymentMethod?: PaymentMethod;
 }
 
 export async function POST(req: Request) {
@@ -36,7 +37,20 @@ export async function POST(req: Request) {
 
   // Create the order
   const orderId = `ORD-${Date.now().toString().slice(-6)}`;
-  const paymentStatus = body.paymentMethod === 'online' ? 'unpaid' : 'cod';
+  let paymentStatus: string;
+  switch (body.paymentMethod) {
+    case 'geidea':
+      paymentStatus = 'geidea_pending';
+      break;
+    case 'tamara':
+      paymentStatus = 'tamara_pending';
+      break;
+    case 'online':
+      paymentStatus = 'unpaid';
+      break;
+    default:
+      paymentStatus = 'cod';
+  }
 
   const { error: orderError } = await supabase.from('orders').insert({
     id: orderId,
@@ -118,13 +132,18 @@ export async function POST(req: Request) {
     `${i + 1}. ${item.product_name} — ${item.qty} ${item.unit} × ${item.unit_price} = ${(item.qty * item.unit_price).toFixed(2)} EGP`
   ).join('\n');
 
+  const paymentLabel = body.paymentMethod === 'geidea' ? 'Geidea Online Payment'
+    : body.paymentMethod === 'tamara' ? 'Tamara (Pay in Instalments)'
+    : body.paymentMethod === 'online' ? 'Online (HyperPay)'
+    : 'Cash on Delivery';
+
   const orderMessage = `🧾 *New Order from Menu*\n\n` +
     `Order ID: ${orderId}\n` +
     `Customer: ${body.customerName}\n` +
     `Type: ${customerType}\n` +
     `Phone: ${body.phone}\n` +
     (body.location ? `Location: ${body.location}\n` : '') +
-    `Payment: ${paymentStatus === 'cod' ? 'Cash on Delivery' : 'Online'}\n\n` +
+    `Payment: ${paymentLabel}\n\n` +
     `*Items:*\n${itemsText}\n\n` +
     `*Total: ${body.total.toFixed(2)} EGP*`;
 
@@ -157,11 +176,60 @@ export async function POST(req: Request) {
     whatsappSent = res.ok;
   } catch { /* non-blocking */ }
 
+  // Create payment session for Geidea or Tamara
+  let paymentSession: { sessionId?: string; checkoutUrl?: string; provider?: string } | null = null;
+
+  if (body.paymentMethod === 'geidea') {
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/create-geidea-session`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          orderId,
+          amount: body.total,
+          currency: 'SAR',
+          customerEmail: '',
+          customerName: body.customerName,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        paymentSession = { sessionId: data.sessionId, checkoutUrl: data.paymentUrl, provider: 'geidea' };
+      }
+    } catch { /* non-blocking */ }
+  } else if (body.paymentMethod === 'tamara') {
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/create-tamara-order`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          orderId,
+          amount: body.total,
+          currency: 'SAR',
+          customerEmail: '',
+          customerName: body.customerName,
+          customerPhone: body.phone,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        paymentSession = { sessionId: data.tamaraOrderId, checkoutUrl: data.checkoutUrl, provider: 'tamara' };
+      }
+    } catch { /* non-blocking */ }
+  }
+
   return NextResponse.json({
     success: true,
     orderId,
     conversationId,
     whatsappSent,
     whatsappLink: `https://wa.me/${body.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(orderMessage)}`,
+    paymentSession,
   });
 }

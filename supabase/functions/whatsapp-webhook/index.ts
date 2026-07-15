@@ -119,9 +119,9 @@ Deno.serve(async (req: Request) => {
         })
         .eq("id", conversationId);
 
-      // Determine bot response using Gemini
-      const geminiUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/gemini-parse`;
-      const geminiRes = await fetch(geminiUrl, {
+      // Determine bot response using Mistral AI
+      const mistralUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/mistral-parse`;
+      const mistralRes = await fetch(mistralUrl, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
@@ -135,9 +135,9 @@ Deno.serve(async (req: Request) => {
         }),
       });
 
-      const { reply, orderData } = await geminiRes.json();
+      const { reply, orderData } = await mistralRes.json();
 
-      // If Gemini extracted an order, create it
+      // If Mistral extracted an order, create it
       if (orderData?.items?.length) {
         const orderId = `ORD-${Date.now().toString().slice(-6)}`;
         await supabase.from("orders").insert({

@@ -5,7 +5,7 @@ import {
   LayoutDashboard, ShoppingBag, Users, Package, MessageSquare,
   TrendingUp, Truck, Clock, CheckCircle2, XCircle, ChevronRight,
   Leaf, Bell, Search, Menu, X, AlertCircle, ExternalLink,
-  Plug, Copy, Check, Activity,
+  Plug, Copy, Check, Activity, CreditCard, Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
 import WhatsAppChat from '@/components/WhatsAppChat';
@@ -367,8 +367,10 @@ function OrdersSection({ orders }: { orders: Order[] }) {
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         order.payment_status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
                         order.payment_status === 'cod' ? 'bg-blue-100 text-blue-700' :
+                        order.payment_status === 'geidea_pending' ? 'bg-violet-100 text-violet-700' :
+                        order.payment_status === 'tamara_pending' ? 'bg-purple-100 text-purple-700' :
                         'bg-red-100 text-red-700'
-                      }`}>{order.payment_status.toUpperCase()}</span>
+                      }`}>{order.payment_status.replace('_', ' ').toUpperCase()}</span>
                     </td>
                     <td className="px-4 py-3.5 text-right font-bold text-gray-900">{order.total.toLocaleString()} EGP</td>
                   </tr>
@@ -587,6 +589,8 @@ function IntegrationsSection() {
     whatsapp: MessageSquare,
     gemini: Activity,
     hyperpay: ShoppingBag,
+    geidea: CreditCard,
+    tamara: Wallet,
     sendgrid: Package,
     cloudinary: Package,
     supabase: Plug,

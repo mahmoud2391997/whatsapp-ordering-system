@@ -4,8 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   ShoppingCart, Plus, Minus, Trash2, X, MessageCircle,
   ChevronRight, Check, Loader2, MapPin, CreditCard, Banknote,
+  Smartphone, Wallet,
 } from 'lucide-react';
 import type { Product } from '@/lib/types';
+
+import type { PaymentMethod } from '@/lib/types';
 
 interface CartItem {
   product: Product;
@@ -29,7 +32,7 @@ export default function MenuCart({ products }: MenuCartProps) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [location, setLocation] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'online'>('cod');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod');
   const [submitting, setSubmitting] = useState(false);
   const [orderResult, setOrderResult] = useState<{ orderId: string; whatsappLink: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +99,12 @@ export default function MenuCart({ products }: MenuCartProps) {
 
       if (!res.ok) {
         throw new Error(data.error ?? 'Checkout failed');
+      }
+
+      // Redirect to payment page for Geidea or Tamara
+      if (data.paymentSession?.checkoutUrl) {
+        window.location.href = data.paymentSession.checkoutUrl;
+        return;
       }
 
       setOrderResult({ orderId: data.orderId, whatsappLink: data.whatsappLink });
@@ -404,11 +413,26 @@ export default function MenuCart({ products }: MenuCartProps) {
                     <span className={`text-xs font-medium ${paymentMethod === 'cod' ? 'text-emerald-700' : 'text-gray-500'}`}>Cash on Delivery</span>
                   </button>
                   <button
+                    onClick={() => setPaymentMethod('geidea')}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${paymentMethod === 'geidea' ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:border-gray-300'}`}
+                  >
+                    <CreditCard className={`w-5 h-5 ${paymentMethod === 'geidea' ? 'text-emerald-600' : 'text-gray-400'}`} />
+                    <span className={`text-xs font-medium ${paymentMethod === 'geidea' ? 'text-emerald-700' : 'text-gray-500'}`}>Geidea</span>
+                  </button>
+                  <button
+                    onClick={() => setPaymentMethod('tamara')}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${paymentMethod === 'tamara' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'}`}
+                  >
+                    <Wallet className={`w-5 h-5 ${paymentMethod === 'tamara' ? 'text-purple-600' : 'text-gray-400'}`} />
+                    <span className={`text-xs font-medium ${paymentMethod === 'tamara' ? 'text-purple-700' : 'text-gray-500'}`}>Tamara</span>
+                    <span className="text-[10px] text-gray-400">Pay in 3 instalments</span>
+                  </button>
+                  <button
                     onClick={() => setPaymentMethod('online')}
                     className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${paymentMethod === 'online' ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200 hover:border-gray-300'}`}
                   >
-                    <CreditCard className={`w-5 h-5 ${paymentMethod === 'online' ? 'text-emerald-600' : 'text-gray-400'}`} />
-                    <span className={`text-xs font-medium ${paymentMethod === 'online' ? 'text-emerald-700' : 'text-gray-500'}`}>Online Payment</span>
+                    <Smartphone className={`w-5 h-5 ${paymentMethod === 'online' ? 'text-emerald-600' : 'text-gray-400'}`} />
+                    <span className={`text-xs font-medium ${paymentMethod === 'online' ? 'text-emerald-700' : 'text-gray-500'}`}>HyperPay</span>
                   </button>
                 </div>
               </div>
