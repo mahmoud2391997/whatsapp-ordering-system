@@ -6,7 +6,7 @@ import {
   ChevronRight, Check, Loader2, MapPin, CreditCard, Banknote,
   Smartphone, Wallet,
 } from 'lucide-react';
-import type { Product } from '@/lib/types';
+import type { Product, CustomerType } from '@/lib/types';
 
 import type { PaymentMethod } from '@/lib/types';
 

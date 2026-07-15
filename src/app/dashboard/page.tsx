@@ -6,10 +6,11 @@ import {
   TrendingUp, Truck, Clock, CheckCircle2, XCircle, ChevronRight,
   Leaf, Bell, Search, Menu, X, AlertCircle, ExternalLink,
   Plug, Copy, Check, Activity, CreditCard, Wallet,
+  UserPlus, Loader2, Link2, Plus,
 } from 'lucide-react';
 import Link from 'next/link';
 import WhatsAppChat from '@/components/WhatsAppChat';
-import type { Product, Customer, Order, OrderItem, Conversation, OrderStatus, CustomerType } from '@/lib/types';
+import type { Product, Customer, Order, OrderItem, Conversation, OrderStatus, CustomerType, MenuPage } from '@/lib/types';
 
 interface IntegrationInfo {
   name: string;
