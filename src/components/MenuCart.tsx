@@ -16,7 +16,7 @@ interface MenuCartProps {
   products: Product[];
   customerName: string;
   customerType: CustomerType;
-  slug: string;
+  customerId: string;
 }
 
 const categoryLabels: Record<string, { label: string; labelAr: string; color: string }> = {
@@ -25,7 +25,7 @@ const categoryLabels: Record<string, { label: string; labelAr: string; color: st
   herbs:      { label: 'Herbs',      labelAr: 'الأعشاب',  color: 'bg-teal-100 text-teal-800' },
 };
 
-export default function MenuCart({ products, customerName, customerType, slug }: MenuCartProps) {
+export default function MenuCart({ products, customerName, customerType, customerId }: MenuCartProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -73,7 +73,7 @@ export default function MenuCart({ products, customerName, customerType, slug }:
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          slug,
+          customerId,
           items: cart.map(i => ({
             product_id: i.product.id,
             product_name: i.product.name,

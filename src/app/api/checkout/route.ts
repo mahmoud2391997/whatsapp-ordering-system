@@ -12,7 +12,7 @@ interface CartItem {
 }
 
 interface CheckoutBody {
-  slug: string;
+  customerId: string;
   items: CartItem[];
   total: number;
   customerType: string;
@@ -24,9 +24,9 @@ export async function POST(req: Request) {
   const supabase = createServerClient();
   const body: CheckoutBody = await req.json().catch(() => null);
 
-  if (!body || !body.slug || !body.items?.length) {
+  if (!body || !body.customerId || !body.items?.length) {
     return NextResponse.json(
-      { error: 'slug and items are required' },
+      { error: 'customerId and items are required' },
       { status: 400 },
     );
   }
@@ -35,12 +35,12 @@ export async function POST(req: Request) {
   const { data: menuPage, error: pageError } = await supabase
     .from('menu_pages')
     .select('*')
-    .eq('slug', body.slug)
+    .eq('id', body.customerId)
     .maybeSingle();
 
   if (pageError || !menuPage) {
     return NextResponse.json(
-      { error: 'Menu page not found for this slug' },
+      { error: 'Menu page not found for this customer ID' },
       { status: 404 },
     );
   }
