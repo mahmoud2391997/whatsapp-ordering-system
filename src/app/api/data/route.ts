@@ -1,20 +1,19 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
-import type { Order, OrderItem, Conversation, Message, MenuPage } from '@/lib/types';
+import type { Order, OrderItem, Conversation, Message } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const supabase = createServerClient();
 
-  const [productsRes, customersRes, ordersRes, conversationsRes, orderItemsRes, messagesRes, menuPagesRes] = await Promise.all([
+  const [productsRes, customersRes, ordersRes, conversationsRes, orderItemsRes, messagesRes] = await Promise.all([
     supabase.from('products').select('*').order('category'),
     supabase.from('customers').select('*').order('name'),
     supabase.from('orders').select('*').order('created_at', { ascending: false }),
     supabase.from('conversations').select('*').order('last_activity', { ascending: false }),
     supabase.from('order_items').select('*'),
     supabase.from('messages').select('*').order('time', { ascending: true }),
-    supabase.from('menu_pages').select('*').order('created_at', { ascending: false }),
   ]);
 
   const orderItems = (orderItemsRes.data ?? []) as OrderItem[];
@@ -35,6 +34,5 @@ export async function GET() {
     customers: customersRes.data ?? [],
     orders,
     conversations,
-    menuPages: menuPagesRes.data ?? [],
   });
 }

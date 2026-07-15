@@ -5,11 +5,11 @@ import {
   LayoutDashboard, ShoppingBag, Users, Package, MessageSquare,
   TrendingUp, Truck, Clock, CheckCircle2, XCircle, ChevronRight,
   Leaf, Bell, Search, Menu, X, AlertCircle, ExternalLink,
-  Plug, Copy, Check, Activity, Link2, Plus, UserPlus, Loader2,
+  Plug, Copy, Check, Activity,
 } from 'lucide-react';
 import Link from 'next/link';
 import WhatsAppChat from '@/components/WhatsAppChat';
-import type { Product, Customer, Order, OrderItem, Conversation, Message, MenuPage, OrderStatus, CustomerType } from '@/lib/types';
+import type { Product, Customer, Order, OrderItem, Conversation, OrderStatus, CustomerType } from '@/lib/types';
 
 interface IntegrationInfo {
   name: string;
@@ -36,7 +36,7 @@ interface IntegrationData {
   recentLogs: Array<{ level: string; service: string; created_at: string }>;
 }
 
-type DashSection = 'overview' | 'orders' | 'conversations' | 'customers' | 'inventory' | 'integrations' | 'menupages';
+type DashSection = 'overview' | 'orders' | 'conversations' | 'customers' | 'inventory' | 'integrations';
 
 const statusConfig: Record<OrderStatus, { label: string; color: string; icon: typeof Clock }> = {
   pending:    { label: 'Pending',    color: 'bg-amber-100 text-amber-700',   icon: Clock },
@@ -59,27 +59,25 @@ export default function DashboardPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [menuPages, setMenuPages] = useState<MenuPage[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/data');
-        if (!res.ok) throw new Error('Failed to fetch');
-        const data = await res.json();
-        setProducts(data.products ?? []);
-        setCustomers(data.customers ?? []);
-        setOrders(data.orders ?? []);
-        setConversations(data.conversations ?? []);
-        setMenuPages(data.menuPages ?? []);
-      } catch {
-        // show empty state
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const loadData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/data');
+      if (!res.ok) throw new Error('Failed to fetch');
+      const data = await res.json();
+      setProducts(data.products ?? []);
+      setCustomers(data.customers ?? []);
+      setOrders(data.orders ?? []);
+      setConversations(data.conversations ?? []);
+    } catch {
+      // show empty state
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const totalRevenue = orders.reduce((s, o) => s + o.total, 0);
   const pendingOrders = orders.filter(o => o.status === 'pending').length;
@@ -92,7 +90,6 @@ export default function DashboardPage() {
     { id: 'customers',      label: 'Customers',      icon: Users },
     { id: 'inventory',      label: 'Inventory',      icon: Package },
     { id: 'integrations',   label: 'Integrations',   icon: Plug },
-    { id: 'menupages',      label: 'Menu Pages',     icon: Link2 },
   ];
 
   const goMenu = useCallback(() => { window.location.href = '/menu'; }, []);
@@ -178,11 +175,10 @@ export default function DashboardPage() {
         <main className="flex-1 p-4 sm:p-6 overflow-auto">
           {section === 'overview'      && <OverviewSection goMenu={goMenu} setSection={setSection} totalRevenue={totalRevenue} pendingOrders={pendingOrders} activeCustomers={activeCustomers} orders={orders} products={products} />}
           {section === 'orders'        && <OrdersSection orders={orders} />}
-          {section === 'conversations' && <ConversationsSection conversations={conversations} goMenu={goMenu} />}
+          {section === 'conversations' && <ConversationsSection conversations={conversations} goMenu={goMenu} onRefresh={loadData} />}
           {section === 'customers'     && <CustomersSection customers={customers} />}
           {section === 'inventory'     && <InventorySection products={products} />}
           {section === 'integrations'  && <IntegrationsSection />}
-          {section === 'menupages'     && <MenuPagesSection menuPages={menuPages} />}
         </main>
       </div>
     </div>
@@ -387,14 +383,14 @@ function OrdersSection({ orders }: { orders: Order[] }) {
 }
 
 /* ── Conversations ── */
-function ConversationsSection({ conversations, goMenu }: { conversations: Conversation[]; goMenu: () => void }) {
+function ConversationsSection({ conversations, goMenu, onRefresh }: { conversations: Conversation[]; goMenu: () => void; onRefresh: () => void | Promise<void> }) {
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">WhatsApp Conversations</h1>
-        <p className="text-gray-500 text-sm mt-0.5">Real-time AI-powered order conversations</p>
+        <p className="text-gray-500 text-sm mt-0.5">Start conversations, confirm orders, and reply to customers</p>
       </div>
-      <WhatsAppChat conversations={conversations} onViewMenu={goMenu} />
+      <WhatsAppChat conversations={conversations} onViewMenu={goMenu} onRefresh={onRefresh} />
     </div>
   );
 }
@@ -749,168 +745,6 @@ function IntegrationsSection() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-/* ── Menu Pages ── */
-function MenuPagesSection({ menuPages }: { menuPages: MenuPage[] }) {
-  const [showCreate, setShowCreate] = useState(false);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [customerType, setCustomerType] = useState<CustomerType>('retail');
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [createdSlug, setCreatedSlug] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
-  const [pages, setPages] = useState<MenuPage[]>(menuPages);
-
-  useEffect(() => { setPages(menuPages); }, [menuPages]);
-
-  const handleCreate = async () => {
-    if (!name || !phone) { setError('Name and phone are required'); return; }
-    setCreating(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/menu-pages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerName: name, phone, customerType }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Failed to create');
-      setCreatedSlug(data.menuPage.slug);
-      setPages(prev => [data.menuPage, ...prev.filter(p => p.id !== data.menuPage.id)]);
-      setName(''); setPhone(''); setCustomerType('retail');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const copyUrl = (slug: string) => {
-    const url = `${window.location.origin}/menu/${slug}`;
-    navigator.clipboard.writeText(url);
-    setCopied(slug);
-    setTimeout(() => setCopied(null), 2000);
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Menu Pages</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Unique menu page for each customer — orders go straight to WhatsApp</p>
-        </div>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
-        >
-          {showCreate ? <X className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-          {showCreate ? 'Cancel' : 'New Menu Page'}
-        </button>
-      </div>
-
-      {/* Create form */}
-      {showCreate && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="font-semibold text-gray-900 mb-4">Create Customer Menu Page</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Customer Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="Ahmed Hassan"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Phone (WhatsApp)</label>
-              <input
-                type="text"
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                placeholder="+20 100 123 4567"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">Customer Type</label>
-              <select
-                value={customerType}
-                onChange={e => setCustomerType(e.target.value as CustomerType)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="retail">Retail</option>
-                <option value="shop">Shop</option>
-                <option value="restaurant">Restaurant</option>
-              </select>
-            </div>
-          </div>
-          {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
-          {createdSlug && (
-            <div className="mt-3 bg-emerald-50 rounded-lg p-3 flex items-center gap-2">
-              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-              <code className="text-sm text-emerald-700 flex-1 truncate">/menu/{createdSlug}</code>
-              <button onClick={() => copyUrl(createdSlug)} className="text-emerald-600 hover:text-emerald-800 transition-colors shrink-0">
-                {copied === createdSlug ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              </button>
-            </div>
-          )}
-          <button
-            onClick={handleCreate}
-            disabled={creating}
-            className="mt-4 flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
-          >
-            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Create Page
-          </button>
-        </div>
-      )}
-
-      {/* Menu pages list */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-        <div className="px-5 py-4 border-b border-gray-50">
-          <h2 className="font-semibold text-gray-900">All Menu Pages ({pages.length})</h2>
-        </div>
-        {pages.length === 0 ? (
-          <div className="px-5 py-12 text-center text-gray-400">
-            <Link2 className="w-10 h-10 mx-auto mb-3 opacity-50" />
-            <p className="text-sm">No menu pages yet. Create one to give a customer their own ordering page.</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {pages.map(page => (
-              <div key={page.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50/50 transition-colors">
-                <div className="w-9 h-9 bg-emerald-100 rounded-lg flex items-center justify-center shrink-0">
-                  <Link2 className="w-4 h-4 text-emerald-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-medium text-gray-900 truncate">{page.customer_name}</h3>
-                  <p className="text-xs text-gray-500">{page.phone} · {page.customer_type}</p>
-                </div>
-                <div className="hidden sm:flex items-center gap-2">
-                  <code className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded">/menu/{page.slug}</code>
-                  <button onClick={() => copyUrl(page.slug)} className="text-gray-400 hover:text-gray-700 transition-colors">
-                    {copied === page.slug ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-                <a
-                  href={`/menu/${page.slug}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-emerald-600 hover:text-emerald-800 transition-colors shrink-0"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
