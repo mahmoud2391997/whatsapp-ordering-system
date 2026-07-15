@@ -313,12 +313,11 @@ function OrdersSection({ orders }: { orders: Order[] }) {
   const filtered = filter === 'all' ? orders : orders.filter(o => o.status === filter);
 
   const handleConfirmOrder = async (orderId: string) => {
-    if (!confirmMsg.trim()) return;
     try {
       const res = await fetch('/api/confirm-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId, message: confirmMsg }),
+        body: JSON.stringify({ orderId, message: '' }),
       });
       if (res.ok) {
         setConfirmingId(null);
@@ -418,14 +417,18 @@ function OrdersSection({ orders }: { orders: Order[] }) {
       {confirmingId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <h3 className="font-bold text-gray-900 text-lg mb-3">Confirm Order & Send Reply</h3>
-            <p className="text-gray-500 text-sm mb-4">Send a confirmation message to the customer via WhatsApp:</p>
-            <textarea
-              value={confirmMsg}
-              onChange={e => setConfirmMsg(e.target.value)}
-              placeholder="e.g., Your order is confirmed! We'll deliver it tomorrow between 10am-2pm. Total: 250 EGP"
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none h-24 mb-4"
-            />
+            <h3 className="font-bold text-gray-900 text-lg mb-2">Confirm Order</h3>
+            <p className="text-gray-500 text-sm mb-6">
+              A professional confirmation message will be sent to the customer via WhatsApp using our order confirmation template.
+            </p>
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-emerald-800">
+                <span className="font-semibold">Order ID:</span> {confirmingId}
+              </p>
+              <p className="text-xs text-emerald-700 mt-2">
+                Template: jaspers_market_order_confirmation_v1
+              </p>
+            </div>
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirmingId(null)}
@@ -435,11 +438,10 @@ function OrdersSection({ orders }: { orders: Order[] }) {
               </button>
               <button
                 onClick={() => handleConfirmOrder(confirmingId)}
-                disabled={!confirmMsg.trim()}
-                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
               >
                 <Check className="w-4 h-4" />
-                Send Confirmation
+                Confirm & Notify
               </button>
             </div>
           </div>

@@ -52,12 +52,16 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (conversation?.phone) {
-      // Send WhatsApp message
+      // Send WhatsApp template message for confirmation
       const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID ?? '';
       const WHATSAPP_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN ?? '';
 
       if (PHONE_NUMBER_ID && WHATSAPP_TOKEN) {
-        await fetch(`https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`, {
+        const formattedPhone = conversation.phone.replace(/[^0-9]/g, '');
+        const orderDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
+        // Send template message
+        await fetch(`https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
@@ -65,21 +69,42 @@ export async function POST(req: Request) {
           },
           body: JSON.stringify({
             messaging_product: 'whatsapp',
-            to: conversation.phone.replace(/[^0-9]/g, ''),
-            type: 'text',
-            text: { body: body.message },
+            to: formattedPhone,
+            type: 'template',
+            template: {
+              name: 'jaspers_market_order_confirmation_v1',
+              language: { code: 'en_US' },
+              components: [
+                {
+                  type: 'body',
+                  parameters: [
+                    { type: 'text', text: order.customer_name },
+                    { type: 'text', text: body.orderId },
+                    { type: 'text', text: orderDate },
+                  ],
+                },
+              ],
+            },
           }),
         });
       }
 
-      // Store the message in conversation
-      await supabase.from('messages').insert({
-        conversation_id: conversation.phone ? (await supabase.from('conversations').select('id').eq('phone', conversation.phone).maybeSingle()).data?.id : '',
-        sender: 'bot',
-        text: body.message,
-        time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        type: 'confirmation',
-      });
+      // Fetch conversation ID to store the message
+      const { data: conv } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('phone', conversation.phone)
+        .maybeSingle();
+
+      if (conv?.id) {
+        await supabase.from('messages').insert({
+          conversation_id: conv.id,
+          sender: 'bot',
+          text: `Order confirmed! Order ID: ${body.orderId}`,
+          time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+          type: 'confirmation',
+        });
+      }
     }
 
     return NextResponse.json({
