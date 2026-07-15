@@ -14,6 +14,8 @@ interface CartItem {
 
 interface CheckoutBody {
   customerId: string;
+  customerName: string;
+  phone: string;
   items: CartItem[];
   total: number;
   customerType?: string;
@@ -66,7 +68,7 @@ export async function POST(req: Request) {
   const { error: orderError } = await supabase.from('orders').insert({
     id: orderId,
     customer_name: body.customerName,
-    customer_type: customerType,
+    customer_type: body.customerType,
     total: body.total,
     status: 'pending',
     payment_status: paymentStatus,
@@ -104,7 +106,7 @@ export async function POST(req: Request) {
     await supabase.from('customers').insert({
       name: body.customerName,
       phone: body.phone,
-      type: customerType,
+      type: body.customerType,
       location: body.location ?? null,
     });
   } else {
@@ -130,7 +132,7 @@ export async function POST(req: Request) {
     const { data: newConv } = await supabase.from('conversations').insert({
       customer_name: body.customerName,
       phone: body.phone,
-      customer_type: customerType,
+    customer_type: body.customerType,
       status: 'active',
       order_id: orderId,
       last_activity: now,
@@ -151,7 +153,7 @@ export async function POST(req: Request) {
   const orderMessage = `🧾 *New Order from Menu*\n\n` +
     `Order ID: ${orderId}\n` +
     `Customer: ${body.customerName}\n` +
-    `Type: ${customerType}\n` +
+    `Type: ${body.customerType}\n` +
     `Phone: ${body.phone}\n` +
     (body.location ? `Location: ${body.location}\n` : '') +
     `Payment: ${paymentLabel}\n\n` +
