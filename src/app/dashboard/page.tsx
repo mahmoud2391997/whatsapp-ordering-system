@@ -308,7 +308,27 @@ function OverviewSection({
 /* ── Orders ── */
 function OrdersSection({ orders }: { orders: Order[] }) {
   const [filter, setFilter] = useState<OrderStatus | 'all'>('all');
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirmMsg, setConfirmMsg] = useState('');
   const filtered = filter === 'all' ? orders : orders.filter(o => o.status === filter);
+
+  const handleConfirmOrder = async (orderId: string) => {
+    if (!confirmMsg.trim()) return;
+    try {
+      const res = await fetch('/api/confirm-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, message: confirmMsg }),
+      });
+      if (res.ok) {
+        setConfirmingId(null);
+        setConfirmMsg('');
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error('Failed to confirm order:', err);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -341,6 +361,7 @@ function OrdersSection({ orders }: { orders: Order[] }) {
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Payment</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-right">Total</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -375,6 +396,16 @@ function OrdersSection({ orders }: { orders: Order[] }) {
                       }`}>{order.payment_status.toUpperCase()}</span>
                     </td>
                     <td className="px-4 py-3.5 text-right font-bold text-gray-900">{order.total.toLocaleString()} EGP</td>
+                    <td className="px-4 py-3.5 text-right">
+                      {order.status === 'pending' && (
+                        <button
+                          onClick={() => setConfirmingId(order.id)}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors font-medium"
+                        >
+                          Confirm
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -382,6 +413,38 @@ function OrdersSection({ orders }: { orders: Order[] }) {
           </table>
         </div>
       </div>
+
+      {/* Confirmation modal */}
+      {confirmingId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="font-bold text-gray-900 text-lg mb-3">Confirm Order & Send Reply</h3>
+            <p className="text-gray-500 text-sm mb-4">Send a confirmation message to the customer via WhatsApp:</p>
+            <textarea
+              value={confirmMsg}
+              onChange={e => setConfirmMsg(e.target.value)}
+              placeholder="e.g., Your order is confirmed! We'll deliver it tomorrow between 10am-2pm. Total: 250 EGP"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none h-24 mb-4"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmingId(null)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleConfirmOrder(confirmingId)}
+                disabled={!confirmMsg.trim()}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                Send Confirmation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
