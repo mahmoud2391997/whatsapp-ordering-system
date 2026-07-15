@@ -13,12 +13,5 @@ export default async function MenuPage() {
 
   const products: Product[] = rawProducts ?? [];
 
-  return (
-    <MenuCart
-      products={products}
-      customerName=""
-      customerType="retail"
-      slug="general"
-    />
-  );
+  return <MenuCart products={products} />;
 }
