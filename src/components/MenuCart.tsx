@@ -5,7 +5,7 @@ import {
   ShoppingCart, Plus, Minus, Trash2, X, MessageCircle,
   ChevronRight, Check, Loader2, MapPin, CreditCard, Banknote,
 } from 'lucide-react';
-import type { Product, CustomerType } from '@/lib/types';
+import type { Product } from '@/lib/types';
 
 interface CartItem {
   product: Product;
@@ -14,9 +14,6 @@ interface CartItem {
 
 interface MenuCartProps {
   products: Product[];
-  customerName: string;
-  customerType: CustomerType;
-  slug: string;
 }
 
 const categoryLabels: Record<string, { label: string; labelAr: string; color: string }> = {
@@ -25,17 +22,19 @@ const categoryLabels: Record<string, { label: string; labelAr: string; color: st
   herbs:      { label: 'Herbs',      labelAr: 'الأعشاب',  color: 'bg-teal-100 text-teal-800' },
 };
 
-export default function MenuCart({ products, customerName, customerType, slug }: MenuCartProps) {
+export default function MenuCart({ products }: MenuCartProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [location, setLocation] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cod' | 'online'>('cod');
   const [submitting, setSubmitting] = useState(false);
   const [orderResult, setOrderResult] = useState<{ orderId: string; whatsappLink: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const priceKey = customerType === 'shop' ? 'shop_price' : customerType === 'restaurant' ? 'wholesale_price' : 'retail_price';
+  const priceKey = 'retail_price';
 
   const addToCart = useCallback((product: Product) => {
     setCart(prev => {
@@ -65,6 +64,10 @@ export default function MenuCart({ products, customerName, customerType, slug }:
 
   const handleCheckout = async () => {
     if (!cart.length) return;
+    if (!name.trim() || !phone.trim()) {
+      setError('Please enter your name and WhatsApp number');
+      return;
+    }
     setSubmitting(true);
     setError(null);
 
@@ -73,7 +76,8 @@ export default function MenuCart({ products, customerName, customerType, slug }:
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          slug,
+          customerName: name.trim(),
+          phone: phone.trim(),
           items: cart.map(i => ({
             product_id: i.product.id,
             product_name: i.product.name,
@@ -82,7 +86,7 @@ export default function MenuCart({ products, customerName, customerType, slug }:
             unit_price: Number(i.product[priceKey]),
           })),
           total: cartTotal,
-          customerType,
+          customerType: 'retail',
           location: location || undefined,
           paymentMethod,
         }),
@@ -119,9 +123,6 @@ export default function MenuCart({ products, customerName, customerType, slug }:
             </div>
             <div>
               <span className="font-bold text-gray-900 text-lg">Fresh Greens</span>
-              {customerName && (
-                <span className="text-gray-400 text-xs ml-2 hidden sm:inline">| {customerName}'s Menu</span>
-              )}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -156,7 +157,7 @@ export default function MenuCart({ products, customerName, customerType, slug }:
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
           <span className="inline-flex items-center gap-1.5 bg-white/20 text-white text-sm px-3 py-1 rounded-full mb-4 backdrop-blur-sm">
             <span className="w-2 h-2 bg-emerald-300 rounded-full animate-pulse"></span>
-            {customerType === 'retail' ? 'Retail Pricing' : customerType === 'shop' ? 'Shop Wholesale Pricing' : 'Restaurant Bulk Pricing'}
+            Fresh Retail Pricing
           </span>
           <h1 className="text-4xl sm:text-5xl font-extrabold text-white mb-3 leading-tight">
             Farm-Fresh Vegetables<br />& Fruits
@@ -349,6 +350,30 @@ export default function MenuCart({ products, customerName, customerType, slug }:
                 <div className="border-t border-gray-200 pt-2 flex items-center justify-between">
                   <span className="font-semibold text-gray-900">Total</span>
                   <span className="font-bold text-emerald-600 text-lg">{cartTotal.toFixed(2)} EGP</span>
+                </div>
+              </div>
+
+              {/* Customer details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">Your Name</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Ahmed Hassan"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1.5 block">WhatsApp Number</label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    placeholder="+20 100 123 4567"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                  />
                 </div>
               </div>
 

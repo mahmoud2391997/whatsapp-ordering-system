@@ -12,10 +12,11 @@ interface CartItem {
 }
 
 interface CheckoutBody {
-  slug: string;
+  customerName: string;
+  phone: string;
   items: CartItem[];
   total: number;
-  customerType: string;
+  customerType?: string;
   location?: string;
   paymentMethod?: 'cod' | 'online';
 }
@@ -24,26 +25,14 @@ export async function POST(req: Request) {
   const supabase = createServerClient();
   const body: CheckoutBody = await req.json().catch(() => null);
 
-  if (!body || !body.slug || !body.items?.length) {
+  if (!body || !body.customerName || !body.phone || !body.items?.length) {
     return NextResponse.json(
-      { error: 'slug and items are required' },
+      { error: 'customerName, phone and items are required' },
       { status: 400 },
     );
   }
 
-  // Fetch the menu page to get customer info
-  const { data: menuPage, error: pageError } = await supabase
-    .from('menu_pages')
-    .select('*')
-    .eq('slug', body.slug)
-    .maybeSingle();
-
-  if (pageError || !menuPage) {
-    return NextResponse.json(
-      { error: 'Menu page not found for this slug' },
-      { status: 404 },
-    );
-  }
+  const customerType = body.customerType ?? 'retail';
 
   // Create the order
   const orderId = `ORD-${Date.now().toString().slice(-6)}`;
@@ -51,13 +40,12 @@ export async function POST(req: Request) {
 
   const { error: orderError } = await supabase.from('orders').insert({
     id: orderId,
-    customer_name: menuPage.customer_name,
-    customer_type: body.customerType ?? menuPage.customer_type,
+    customer_name: body.customerName,
+    customer_type: customerType,
     total: body.total,
     status: 'pending',
     payment_status: paymentStatus,
     location: body.location ?? null,
-    menu_page_id: menuPage.id,
   });
 
   if (orderError) {
@@ -84,25 +72,26 @@ export async function POST(req: Request) {
   const { data: existingCustomer } = await supabase
     .from('customers')
     .select('id')
-    .eq('phone', menuPage.phone)
+    .eq('phone', body.phone)
     .maybeSingle();
 
   if (!existingCustomer) {
     await supabase.from('customers').insert({
-      name: menuPage.customer_name,
-      phone: menuPage.phone,
-      type: body.customerType ?? menuPage.customer_type,
+      name: body.customerName,
+      phone: body.phone,
+      type: customerType,
       location: body.location ?? null,
     });
   } else {
-    await supabase.rpc('increment_customer_orders', { customer_phone: menuPage.phone });
+    await supabase.rpc('increment_customer_orders', { customer_phone: body.phone });
   }
 
   // Upsert conversation and link the order
+  const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
   const { data: existingConv } = await supabase
     .from('conversations')
     .select('id')
-    .eq('phone', menuPage.phone)
+    .eq('phone', body.phone)
     .maybeSingle();
 
   let conversationId: string;
@@ -110,20 +99,16 @@ export async function POST(req: Request) {
   if (existingConv) {
     conversationId = existingConv.id;
     await supabase.from('conversations')
-      .update({
-        order_id: orderId,
-        status: 'active',
-        last_activity: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
-      })
+      .update({ order_id: orderId, status: 'active', last_activity: now })
       .eq('id', conversationId);
   } else {
     const { data: newConv } = await supabase.from('conversations').insert({
-      customer_name: menuPage.customer_name,
-      phone: menuPage.phone,
-      customer_type: body.customerType ?? menuPage.customer_type,
+      customer_name: body.customerName,
+      phone: body.phone,
+      customer_type: customerType,
       status: 'active',
       order_id: orderId,
-      last_activity: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      last_activity: now,
     }).select('id').single();
     conversationId = newConv!.id;
   }
@@ -133,11 +118,11 @@ export async function POST(req: Request) {
     `${i + 1}. ${item.product_name} — ${item.qty} ${item.unit} × ${item.unit_price} = ${(item.qty * item.unit_price).toFixed(2)} EGP`
   ).join('\n');
 
-  const orderMessage = `🧾 *New Order from Menu Page*\n\n` +
+  const orderMessage = `🧾 *New Order from Menu*\n\n` +
     `Order ID: ${orderId}\n` +
-    `Customer: ${menuPage.customer_name}\n` +
-    `Type: ${body.customerType ?? menuPage.customer_type}\n` +
-    `Phone: ${menuPage.phone}\n` +
+    `Customer: ${body.customerName}\n` +
+    `Type: ${customerType}\n` +
+    `Phone: ${body.phone}\n` +
     (body.location ? `Location: ${body.location}\n` : '') +
     `Payment: ${paymentStatus === 'cod' ? 'Cash on Delivery' : 'Online'}\n\n` +
     `*Items:*\n${itemsText}\n\n` +
@@ -148,11 +133,11 @@ export async function POST(req: Request) {
     conversation_id: conversationId,
     sender: 'bot',
     text: orderMessage,
-    time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    time: now,
     type: 'order',
   });
 
-  // Send the order to the store's WhatsApp via edge function
+  // Send the order confirmation to the customer's WhatsApp via edge function
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? '';
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 
@@ -165,7 +150,7 @@ export async function POST(req: Request) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        to: menuPage.phone,
+        to: body.phone,
         text: `شكراً لطلبك! 🌿\nرقم الطلب: ${orderId}\nالمجموع: ${body.total.toFixed(2)} EGP\n\nسنتواصل معك قريباً لتأكيد الطلب والتوصيل.`,
       }),
     });
@@ -177,6 +162,6 @@ export async function POST(req: Request) {
     orderId,
     conversationId,
     whatsappSent,
-    whatsappLink: `https://wa.me/${menuPage.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(orderMessage)}`,
+    whatsappLink: `https://wa.me/${body.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(orderMessage)}`,
   });
 }
