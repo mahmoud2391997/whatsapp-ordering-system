@@ -151,10 +151,10 @@ Deno.serve(async (req: Request) => {
         const appUrl = Deno.env.get("APP_URL") ?? "https://fresh-greens.vercel.app";
         const menuLink = `${appUrl}/menu/${menuPageId}`;
 
-        // Send menu link to customer via WhatsApp
-        const menuReplyText = `🛒 اختر المنتجات المطلوبة:\n${menuLink}\n\nClick the link above to browse and customize your order.`;
+        // Send menu link to customer via WhatsApp with button
+        const menuReplyText = `🛒 اختر المنتجات المطلوبة:\n\nClick the link below to browse and customize your order.`;
         
-        await fetch(`https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`, {
+        await fetch(`https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${WHATSAPP_TOKEN}`,
@@ -168,11 +168,26 @@ Deno.serve(async (req: Request) => {
           }),
         });
 
+        // Send the menu link as a separate message for better UX
+        await fetch(`https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${WHATSAPP_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to: from,
+            type: "text",
+            text: { body: `📱 Open Menu:\n${menuLink}` },
+          }),
+        });
+
         // Store menu link message
         await supabase.from("messages").insert({
           conversation_id: conversationId,
           sender: "bot",
-          text: menuReplyText,
+          text: `${menuReplyText}\n${menuLink}`,
           time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
           type: "menu_link",
         });
