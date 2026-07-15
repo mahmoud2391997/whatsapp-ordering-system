@@ -1,4 +1,4 @@
-// File: /home/project/src/app/api/data/route.ts
+// File: /vercel/share/v0-project/src/app/api/data/route.ts
 import * as entry from '../../../../../src/app/api/data/route.js'
 import type { NextRequest } from 'next/server.js'
 
