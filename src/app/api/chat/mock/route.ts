@@ -113,8 +113,8 @@ export async function POST(req: Request) {
   }
 
   // ── Location detection ──
-  if (/موقع|location|address|عنوان|العنوان|city|مدينة/i.test(message)) {
-    const location = message.replace(/.*(موقع|location|address|عنوان|العنوان|city|مدينة)\s*[:：]?\s*/i, '').trim() || message.trim();
+  if (/^(موقع|location|address|عنوان|العنوان|city|مدينة)\s*[:：]?\s*/i.test(message)) {
+    const location = message.replace(/^(موقع|location|address|عنوان|العنوان|city|مدينة)\s*[:：]?\s*/i, '').trim();
     return NextResponse.json({
       reply: `تم استلام موقعك: ${location}\n\nيمكنك تصفح المنتجات من القائمة:\n📱 /menu\n\nأو أرسل لنا طلبك مباشرة مثل: "5 كيلو طماطم"`,
       intent: 'location',
