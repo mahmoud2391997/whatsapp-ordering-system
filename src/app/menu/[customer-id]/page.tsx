@@ -16,7 +16,7 @@ export default async function CustomerMenuPage({ params }: PageProps) {
   const { data: menuPage, error: pageError } = await supabase
     .from('menu_pages')
     .select('*')
-    .eq('id', customerId)
+    .eq('slug', customerId)
     .maybeSingle();
 
   if (pageError || !menuPage) {
@@ -54,7 +54,7 @@ export default async function CustomerMenuPage({ params }: PageProps) {
         products={products as Product[]}
         customerName={menuPage.customer_name}
         customerType={menuPage.customer_type}
-        customerId={customerId}
+        customerId={menuPage.id}
       />
     </div>
   );

@@ -968,9 +968,10 @@ function MenuPagesSection({ menuPages }: { menuPages: MenuPage[] }) {
                   href={`/menu/${page.slug}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-emerald-600 hover:text-emerald-800 transition-colors shrink-0"
+                  className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors shrink-0"
                 >
-                  <ExternalLink className="w-4 h-4" />
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Review
                 </a>
               </div>
             ))}
