@@ -83,6 +83,8 @@ export default function MenuCart({ products, customerName, customerType, custome
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerId,
+          customerName: name,
+          phone,
           items: cart.map(i => ({
             product_id: i.product.id,
             product_name: i.product.name,
