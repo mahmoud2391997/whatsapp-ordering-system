@@ -966,7 +966,7 @@ function MenuPagesSection({ menuPages }: { menuPages: MenuPage[] }) {
                   </button>
                 </div>
                 <a
-                  href={`/menu/${page.slug}`}
+                  href="/menu"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors shrink-0"
