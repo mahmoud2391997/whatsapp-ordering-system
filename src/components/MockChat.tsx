@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Send, Loader2, RotateCcw, Smartphone } from 'lucide-react';
+import { Bot, Send, Loader2, RotateCcw, Smartphone, Link2 } from 'lucide-react';
 import type { CustomerType } from '@/lib/types';
 
 interface ChatMsg {
@@ -17,7 +17,32 @@ const quickPrompts = [
   'نعم أريد التأكيد',
   'الدفع عند الاستلام',
   'موقع: المعادي، القاهرة',
+  'عرض المنتجات',
 ];
+
+function BotMessage({ text }: { text: string }) {
+  const parts = text.split(/(\/menu[^\s]*)/g);
+  return (
+    <p className="leading-relaxed" dir="auto">
+      {parts.map((part, i) =>
+        part.startsWith('/menu') ? (
+          <a
+            key={i}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-800 font-medium underline underline-offset-2"
+          >
+            <Link2 className="w-3.5 h-3.5" />
+            Open Menu
+          </a>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </p>
+  );
+}
 
 export default function MockChat() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -115,7 +140,11 @@ export default function MockChat() {
                   : 'bg-white text-gray-800 rounded-tl-none'
               }`}
             >
-              <p className="leading-relaxed" dir="auto">{msg.text}</p>
+              {msg.role === 'bot' ? (
+                <BotMessage text={msg.text} />
+              ) : (
+                <p className="leading-relaxed" dir="auto">{msg.text}</p>
+              )}
             </div>
           </div>
         ))}

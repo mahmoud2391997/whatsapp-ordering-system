@@ -122,6 +122,16 @@ export async function POST(req: Request) {
     });
   }
 
+  // ── Browse products ──
+  if (/استعراض|عرض|منيو|menu|products|المنتجات|القائمة|بدي اشوف|ابي اشوف|اريد استعراض|browse/i.test(message)) {
+    const menuUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL ? '' : ''}/menu`;
+    return NextResponse.json({
+      reply: `🛒 اختر المنتجات المطلوبة من القائمة:\n\nيمكنك تصفح جميع المنتجات و الأسعار من خلال الرابط التالي:\n\n📱 افتح القائمة:\n/menu\n\nأو اكتب طلبك مباشرة مثل: "5 كيلو طماطم"`,
+      intent: 'menu_link',
+      orderData: null,
+    });
+  }
+
   // ── Default fallback ──
   return NextResponse.json({
     reply: 'شكراً لتواصلك! هل تريد استعراض المنتجات أم تريد إرسال طلب؟\nيمكنك كتابة طلبك مباشرة مثل: "5 كيلو طماطم و 3 كيلو خيار"',
