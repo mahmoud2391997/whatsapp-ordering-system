@@ -116,14 +116,14 @@ export async function POST(req: Request) {
   if (/موقع|location|address|عنوان|العنوان|city|مدينة/i.test(message)) {
     const location = message.replace(/.*(موقع|location|address|عنوان|العنوان|city|مدينة)\s*[:：]?\s*/i, '').trim() || message.trim();
     return NextResponse.json({
-      reply: `تم استلام موقعك: ${location}\n\nهل تريد استكمال الطلب؟ أرسل لنا المنتجات المطلوبة.`,
+      reply: `تم استلام موقعك: ${location}\n\nيمكنك تصفح المنتجات من القائمة:\n📱 /menu\n\nأو أرسل لنا طلبك مباشرة مثل: "5 كيلو طماطم"`,
       intent: 'location',
       orderData: { items: [], total: 0, location },
     });
   }
 
   // ── Browse products ──
-  if (/استعراض|عرض|منيو|menu|products|المنتجات|القائمة|بدي اشوف|ابي اشوف|اريد استعراض|browse/i.test(message)) {
+  if (/استعراض|عرض|منيو|menu|products|المنتجات|القائمة|القايمة|بدي اشوف|ابي اشوف|اريد استعراض|browse|قائمة|قايمة/i.test(message)) {
     const menuUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL ? '' : ''}/menu`;
     return NextResponse.json({
       reply: `🛒 اختر المنتجات المطلوبة من القائمة:\n\nيمكنك تصفح جميع المنتجات و الأسعار من خلال الرابط التالي:\n\n📱 افتح القائمة:\n/menu\n\nأو اكتب طلبك مباشرة مثل: "5 كيلو طماطم"`,
@@ -134,7 +134,7 @@ export async function POST(req: Request) {
 
   // ── Default fallback ──
   return NextResponse.json({
-    reply: 'شكراً لتواصلك! هل تريد استعراض المنتجات أم تريد إرسال طلب؟\nيمكنك كتابة طلبك مباشرة مثل: "5 كيلو طماطم و 3 كيلو خيار"',
+    reply: 'يمكنك تصفح جميع المنتجات والأسعار من القائمة:\n📱 /menu\n\nأو اكتب طلبك مباشرة مثل: "5 كيلو طماطم و 3 كيلو خيار"',
     intent: 'other',
     orderData: null,
   });
