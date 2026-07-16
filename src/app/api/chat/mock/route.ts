@@ -11,6 +11,7 @@ const RESTAURANT_PATTERNS = /مطعم|restaurant|كافيه|café|cafe/i;
 const CONFIRM_PATTERNS = /نعم|اكد|تأكيد|confirm|yes|موافق|اوكي|ok/i;
 const COD_PATTERNS = /استلام|cod|كاش|نقد|cash/i;
 const ONLINE_PATTERNS = /إلكتروني|online|بطاقة|card|transfer/i;
+const ADDRESS_PATTERNS = /شارع|طريق|شارع|حى|حي|منطقة|بلك|بلوك|عمار|مبنى|دور|شقة|فيلا|مدينة|القاهرة|الرياض|جدة|الدمام|محافظة|جمهورية|مصر|الكويت|الإمارات|دبي|ابو ظبي|شارع|تقاطع|قطع/i;
 
 interface ChatMessage {
   role: 'customer' | 'bot';
@@ -53,13 +54,13 @@ export async function POST(req: Request) {
 
     if (RETAIL_PATTERNS.test(message)) {
       detectedType = 'retail';
-      reply = 'ممتاز! سعيد بخدمتك. هل يمكنك مشاركتي موقعك للتوصيل؟';
+      reply = 'ممتاز! سعيد بخدمتك. أرسل لنا موقعك للتوصيل أو تصفح المنتجات من القائمة:\n📱 /menu';
     } else if (SHOP_PATTERNS.test(message)) {
       detectedType = 'shop';
-      reply = 'رائع! ستحصل على أسعار الجملة الخاصة بالمحلات. أرسل لنا موقعك للتوصيل.';
+      reply = 'رائع! ستحصل على أسعار الجملة الخاصة بالمحلات. أرسل لنا موقعك أو تصفح القائمة:\n📱 /menu';
     } else if (RESTAURANT_PATTERNS.test(message)) {
       detectedType = 'restaurant';
-      reply = 'ممتاز! ستحصل على أفضل أسعار الجملة للمطاعم. أرسل لنا موقعك.';
+      reply = 'ممتاز! ستحصل على أفضل أسعار الجملة للمطاعم. أرسل لنا موقعك أو تصفح القائمة:\n📱 /menu';
     } else {
       reply = 'عذراً، هل أنت عميل فردي أم تطلب لمحل أم لمطعم؟';
     }
@@ -87,32 +88,13 @@ export async function POST(req: Request) {
 
   if (ONLINE_PATTERNS.test(message)) {
     return NextResponse.json({
-      reply: '链接 الدفع الإلكتروني:\nhttps://pay.example.com/order/12345\n\nيرجى إتمام الدفع وسنؤكد طلبك فوراً ✅',
+      reply: ' الدفع الإلكتروني:\nhttps://pay.example.com/order/12345\n\nيرجى إتمام الدفع وسنؤكد طلبك فوراً ✅',
       intent: 'payment_choice',
       orderData: null,
     });
   }
 
-  // ── Try to parse an order from the message ──
-  const { data: products } = await supabase
-    .from('products')
-    .select('name, name_ar, unit, retail_price, shop_price, wholesale_price')
-    .order('category');
-
-  const priceKey = customerType === 'shop' ? 'shop_price' : customerType === 'restaurant' ? 'wholesale_price' : 'retail_price';
-
-  const orderData = parseOrderFromText(message, products ?? [], priceKey);
-
-  if (orderData) {
-    const itemsList = orderData.items.map(i => `• ${i.name} × ${i.qty} ${i.unit} = ${i.price * i.qty} EGP`).join('\n');
-    return NextResponse.json({
-      reply: `تم استلام طلبك! 🛒\n\n${itemsList}\n\nالمجموع: ${orderData.total} EGP${orderData.location ? `\nالموقع: ${orderData.location}` : ''}\n\nهل تريد تأكيد الطلب؟ (نعم/لا)`,
-      intent: 'order',
-      orderData,
-    });
-  }
-
-  // ── Location detection ──
+  // ── Location detection (keyword prefix OR looks like an address) ──
   if (/^(موقع|location|address|عنوان|العنوان|city|مدينة)\s*[:：]?\s*/i.test(message)) {
     const location = message.replace(/^(موقع|location|address|عنوان|العنوان|city|مدينة)\s*[:：]?\s*/i, '').trim();
     return NextResponse.json({
@@ -122,13 +104,35 @@ export async function POST(req: Request) {
     });
   }
 
+  // Plain address without keyword (after being asked for location)
+  const lastBotMsg = [...history].reverse().find(m => m.role === 'bot')?.text ?? '';
+  const askedForLocation = /موقعك|التوصيل|location/i.test(lastBotMsg);
+  if (askedForLocation && ADDRESS_PATTERNS.test(message)) {
+    return NextResponse.json({
+      reply: `تم استلام موقعك: ${message.trim()}\n\nيمكنك تصفح المنتجات من القائمة:\n📱 /menu\n\nأو أرسل لنا طلبك مباشرة مثل: "5 كيلو طماطم"`,
+      intent: 'location',
+      orderData: { items: [], total: 0, location: message.trim() },
+    });
+  }
+
   // ── Browse products ──
   if (/استعراض|عرض|منيو|menu|products|المنتجات|القائمة|القايمة|بدي اشوف|ابي اشوف|اريد استعراض|browse|قائمة|قايمة/i.test(message)) {
-    const menuUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL ? '' : ''}/menu`;
     return NextResponse.json({
-      reply: `🛒 اختر المنتجات المطلوبة من القائمة:\n\nيمكنك تصفح جميع المنتجات و الأسعار من خلال الرابط التالي:\n\n📱 افتح القائمة:\n/menu\n\nأو اكتب طلبك مباشرة مثل: "5 كيلو طماطم"`,
+      reply: '🛒 اختر المنتجات المطلوبة من القائمة:\n\n📱 افتح القائمة:\n/menu\n\nأو اكتب طلبك مباشرة مثل: "5 كيلو طماطم و 3 كيلو خيار"',
       intent: 'menu_link',
       orderData: null,
+    });
+  }
+
+  // ── Try to parse an order from the message ──
+  const orderData = parseOrderFromText(message, customerType);
+
+  if (orderData) {
+    const itemsList = orderData.items.map(i => `• ${i.name} × ${i.qty} ${i.unit} = ${(i.price * i.qty).toFixed(2)} EGP`).join('\n');
+    return NextResponse.json({
+      reply: `تم استلام طلبك! 🛒\n\n${itemsList}\n\nالمجموع: ${orderData.total.toFixed(2)} EGP\n\nهل تريد تأكيد الطلب؟ (نعم/لا)`,
+      intent: 'order',
+      orderData,
     });
   }
 
@@ -140,27 +144,43 @@ export async function POST(req: Request) {
   });
 }
 
-function parseOrderFromText(text: string, products: Array<{ name: string; name_ar: string; unit: string; retail_price: number; shop_price: number; wholesale_price: number }>, priceKey: string): ParsedOrder | null {
-  const items: ParsedOrder['items'] = [];
-  const usedProducts = new Set<string>();
+// Hardcoded products with correct prices per customer type
+const PRODUCTS: Record<string, { name: string; nameAr: string; unit: string; prices: { retail: number; shop: number; restaurant: number } }> = {
+  tomato:    { name: 'Tomato',    nameAr: 'طماطم',      unit: 'kg',     prices: { retail: 15, shop: 12, restaurant: 10 } },
+  cucumber:  { name: 'Cucumber',  nameAr: 'خيار',       unit: 'kg',     prices: { retail: 12, shop: 10, restaurant: 8 } },
+  potato:    { name: 'Potato',    nameAr: 'بطاطس',      unit: 'kg',     prices: { retail: 10, shop: 8, restaurant: 6 } },
+  onion:     { name: 'Onion',     nameAr: 'بصل',        unit: 'kg',     prices: { retail: 1.2, shop: 0.9, restaurant: 0.7 } },
+  carrot:    { name: 'Carrot',    nameAr: 'جزر',        unit: 'kg',     prices: { retail: 1.5, shop: 1.2, restaurant: 0.85 } },
+  spinach:   { name: 'Spinach',   nameAr: 'سبانخ',      unit: 'kg',     prices: { retail: 2, shop: 1.6, restaurant: 1.25 } },
+  broccoli:  { name: 'Broccoli',  nameAr: 'بروكلي',     unit: 'piece',  prices: { retail: 2.75, shop: 2.2, restaurant: 1.7 } },
+  lettuce:   { name: 'Lettuce',   nameAr: 'خس',         unit: 'piece',  prices: { retail: 1.5, shop: 1.2, restaurant: 0.9 } },
+  pepper:    { name: 'Bell Pepper', nameAr: 'فلفل رومي', unit: 'kg',    prices: { retail: 3.5, shop: 2.8, restaurant: 2.2 } },
+  apple:     { name: 'Apple',     nameAr: 'تفاح',       unit: 'kg',     prices: { retail: 35, shop: 30, restaurant: 26 } },
+  orange:    { name: 'Orange',    nameAr: 'برتقال',      unit: 'kg',     prices: { retail: 20, shop: 17, restaurant: 14 } },
+  banana:    { name: 'Banana',    nameAr: 'موز',         unit: 'kg',     prices: { retail: 25, shop: 22, restaurant: 18 } },
+  lemon:     { name: 'Lemon',     nameAr: 'ليمون',       unit: 'kg',     prices: { retail: 2.8, shop: 2.2, restaurant: 1.7 } },
+  mint:      { name: 'Mint',      nameAr: 'نعناع',       unit: 'bunch',  prices: { retail: 5, shop: 4, restaurant: 3 } },
+  parsley:   { name: 'Parsley',   nameAr: 'بقدونس',      unit: 'bunch',  prices: { retail: 5, shop: 4, restaurant: 3 } },
+  basil:     { name: 'Basil',     nameAr: 'ريحان',       unit: 'bunch',  prices: { retail: 1.5, shop: 1.2, restaurant: 0.9 } },
+};
 
-  // Split text by common separators (و, and, commas)
+function parseOrderFromText(text: string, customerType: CustomerType): ParsedOrder | null {
+  const items: ParsedOrder['items'] = [];
+  const priceKey = customerType as 'retail' | 'shop' | 'restaurant';
+
+  // Split by و / , / and
   const segments = text.split(/\s*(?:و|,|and|،)\s*/i);
 
   for (const segment of segments) {
-    // Try to find a number in this segment
     const numMatch = segment.match(/(\d+)/);
     const qty = numMatch ? parseInt(numMatch[1]) : 1;
 
-    for (const product of products) {
-      if (usedProducts.has(product.name)) continue;
-
-      const nameRegex = new RegExp(`(${product.name}|${product.name_ar})`, 'i');
+    for (const [, product] of Object.entries(PRODUCTS)) {
+      const nameRegex = new RegExp(`(${product.name}|${product.nameAr})`, 'i');
       if (!nameRegex.test(segment)) continue;
 
-      const price = Number(product[priceKey as keyof typeof product]);
+      const price = product.prices[priceKey];
       items.push({ name: product.name, qty, unit: product.unit, price });
-      usedProducts.add(product.name);
       break;
     }
   }
