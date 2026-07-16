@@ -657,7 +657,7 @@ function IntegrationsSection() {
 
   const serviceIcons: Record<string, typeof Plug> = {
     whatsapp: MessageSquare,
-    gemini: Activity,
+    mistral: Activity,
     hyperpay: ShoppingBag,
     geidea: CreditCard,
     tamara: Wallet,

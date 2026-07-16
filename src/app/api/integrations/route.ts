@@ -22,7 +22,7 @@ export async function GET() {
     'WHATSAPP_ACCESS_TOKEN',
     'WHATSAPP_PHONE_NUMBER_ID',
     'WHATSAPP_VERIFY_TOKEN',
-    'GEMINI_API_KEY',
+    'MISTRAL_API_KEY',
     'HYPERPAY_URL',
     'HYPERPAY_ACCESS_TOKEN',
     'HYPERPAY_ENTITY_ID',
@@ -52,7 +52,7 @@ export async function GET() {
   ]);
 
   const whatsappConfigured = !!(env.WHATSAPP_ACCESS_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID && env.WHATSAPP_VERIFY_TOKEN);
-  const geminiConfigured = !!env.GEMINI_API_KEY;
+  const mistralConfigured = !!env.MISTRAL_API_KEY;
   const hyperpayConfigured = !!(env.HYPERPAY_URL && env.HYPERPAY_ACCESS_TOKEN && env.HYPERPAY_ENTITY_ID);
   const geideaConfigured = !!(env.GEIDEA_MERCHANT_PUBLIC_KEY && env.GEIDEA_API_PASSWORD);
   const tamaraConfigured = !!env.TAMARA_API_TOKEN;
@@ -73,10 +73,10 @@ export async function GET() {
       eventCount: whatsappEvents.data?.length ?? 0,
     },
     {
-      name: 'Google Gemini AI',
-      service: 'gemini',
-      configured: geminiConfigured,
-      status: geminiConfigured ? 'operational' : 'pending',
+      name: 'Mistral AI',
+      service: 'mistral',
+      configured: mistralConfigured,
+      status: mistralConfigured ? 'operational' : 'pending',
       description: 'AI-powered order parsing from Arabic & English WhatsApp messages',
     },
     {
@@ -154,7 +154,7 @@ export async function GET() {
     edgeFunctions: [
       { name: 'whatsapp-webhook', url: `${supabaseUrl}/functions/v1/whatsapp-webhook` },
       { name: 'whatsapp-send', url: `${supabaseUrl}/functions/v1/whatsapp-send` },
-      { name: 'gemini-parse', url: `${supabaseUrl}/functions/v1/gemini-parse` },
+      { name: 'mistral-parse', url: `${supabaseUrl}/functions/v1/mistral-parse` },
       { name: 'hyperpay-webhook', url: `${supabaseUrl}/functions/v1/hyperpay-webhook` },
       { name: 'create-payment', url: `${supabaseUrl}/functions/v1/create-payment` },
       { name: 'create-geidea-session', url: `${supabaseUrl}/functions/v1/create-geidea-session` },
