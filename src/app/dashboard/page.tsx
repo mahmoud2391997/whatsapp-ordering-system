@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   LayoutDashboard, ShoppingBag, Users, Package, MessageSquare,
   TrendingUp, Truck, Clock, CheckCircle2, XCircle, ChevronRight,
@@ -181,7 +181,7 @@ export default function DashboardPage() {
           {section === 'orders'        && <OrdersSection orders={orders} />}
           {section === 'conversations' && <ConversationsSection conversations={conversations} goMenu={goMenu} onRefresh={loadData} />}
           {section === 'customers'     && <CustomersSection customers={customers} />}
-          {section === 'inventory'     && <InventorySection products={products} />}
+          {section === 'inventory'     && <InventorySection products={products} onRefresh={loadData} />}
           {section === 'integrations'  && <IntegrationsSection />}
           {section === 'chatbot'       && <ChatbotSection />}
         </main>
@@ -534,13 +534,82 @@ function CustomersSection({ customers }: { customers: Customer[] }) {
 }
 
 /* ── Inventory ── */
-function InventorySection({ products }: { products: Product[] }) {
+function InventorySection({ products, onRefresh }: { products: Product[]; onRefresh: () => void }) {
   const [category, setCategory] = useState<'all' | 'vegetables' | 'fruits' | 'herbs'>('all');
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<Product | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const emptyForm = { name: '', name_ar: '', category: 'vegetables' as 'vegetables' | 'fruits' | 'herbs', unit: 'kg', retail_price: '', shop_price: '', wholesale_price: '', stock: '', image_url: '' };
+  const [form, setForm] = useState(emptyForm);
+
   const filtered = category === 'all' ? products : products.filter(p => p.category === category);
+
+  function openAdd() { setEditing(null); setForm(emptyForm); setShowForm(true); }
+  function openEdit(p: Product) {
+    setEditing(p);
+    setForm({ name: p.name, name_ar: p.name_ar, category: p.category, unit: p.unit, retail_price: String(p.retail_price), shop_price: String(p.shop_price), wholesale_price: String(p.wholesale_price), stock: String(p.stock), image_url: p.image_url });
+    setShowForm(true);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const url = editing ? `/api/products/${editing.id}` : '/api/products';
+      const method = editing ? 'PUT' : 'POST';
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      if (!res.ok) throw new Error('Failed');
+      setShowForm(false);
+      onRefresh();
+    } catch { alert('Failed to save product'); } finally { setSaving(false); }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('Delete this product?')) return;
+    const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
+    if (res.ok) onRefresh(); else alert('Failed to delete');
+  }
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/products/upload', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      alert(`Imported ${json.imported} products`);
+      onRefresh();
+    } catch (err: unknown) { alert(err instanceof Error ? err.message : 'Upload failed'); } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  function downloadTemplate() { window.open('/api/products/template', '_blank'); }
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold text-gray-900">Inventory & Products</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-gray-900">Inventory & Products</h1>
+        <div className="flex items-center gap-2">
+          <button onClick={downloadTemplate} className="text-xs px-3 py-1.5 rounded-lg font-medium bg-white border border-gray-200 text-gray-600 hover:border-emerald-400 transition-colors">
+            Download Template
+          </button>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleUpload} />
+          <button onClick={() => fileRef.current?.click()} disabled={uploading} className="text-xs px-3 py-1.5 rounded-lg font-medium bg-white border border-gray-200 text-gray-600 hover:border-emerald-400 transition-colors disabled:opacity-50">
+            {uploading ? 'Uploading...' : 'Upload Excel'}
+          </button>
+          <button onClick={openAdd} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition-colors">
+            <Plus className="w-3.5 h-3.5" /> Add Product
+          </button>
+        </div>
+      </div>
+
       <div className="flex flex-wrap gap-2">
         {(['all', 'vegetables', 'fruits', 'herbs'] as const).map(c => (
           <button
@@ -552,6 +621,7 @@ function InventorySection({ products }: { products: Product[] }) {
           >{c === 'all' ? 'All Products' : c}</button>
         ))}
       </div>
+
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -564,6 +634,7 @@ function InventorySection({ products }: { products: Product[] }) {
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Restaurant</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Stock</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -605,6 +676,12 @@ function InventorySection({ products }: { products: Product[] }) {
                     <td className="px-4 py-3.5">
                       <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${stockStatus.color}`}>{stockStatus.label}</span>
                     </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => openEdit(p)} className="text-xs text-emerald-600 hover:underline font-medium">Edit</button>
+                        <button onClick={() => handleDelete(p.id)} className="text-xs text-red-600 hover:underline font-medium">Delete</button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -612,6 +689,78 @@ function InventorySection({ products }: { products: Product[] }) {
           </table>
         </div>
       </div>
+
+      {showForm && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowForm(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">{editing ? 'Edit Product' : 'Add Product'}</h2>
+              <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Name (English)</label>
+                  <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Name (Arabic)</label>
+                  <input value={form.name_ar} onChange={e => setForm({ ...form, name_ar: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none" dir="rtl" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
+                  <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value as 'vegetables' | 'fruits' | 'herbs' })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none capitalize">
+                    <option value="vegetables">Vegetables</option>
+                    <option value="fruits">Fruits</option>
+                    <option value="herbs">Herbs</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Unit</label>
+                  <select value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none">
+                    <option value="kg">kg</option>
+                    <option value="piece">piece</option>
+                    <option value="bunch">bunch</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Retail Price (EGP)</label>
+                  <input type="number" step="0.01" value={form.retail_price} onChange={e => setForm({ ...form, retail_price: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Shop Price (EGP)</label>
+                  <input type="number" step="0.01" value={form.shop_price} onChange={e => setForm({ ...form, shop_price: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Wholesale (EGP)</label>
+                  <input type="number" step="0.01" value={form.wholesale_price} onChange={e => setForm({ ...form, wholesale_price: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Stock</label>
+                  <input type="number" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Image URL</label>
+                  <input value={form.image_url} onChange={e => setForm({ ...form, image_url: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none" placeholder="https://..." />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+              <button onClick={handleSave} disabled={saving || !form.name || !form.name_ar} className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center gap-1.5">
+                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {editing ? 'Save Changes' : 'Add Product'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
