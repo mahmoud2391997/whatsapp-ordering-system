@@ -31,9 +31,7 @@ export async function GET() {
     'GEIDEA_API_URL',
     'TAMARA_API_TOKEN',
     'TAMARA_API_URL',
-    'SENDGRID_API_KEY',
-    'CLOUDINARY_CLOUD_NAME',
-    'CLOUDINARY_API_KEY',
+
   ];
 
   const env: Record<string, string | undefined> = {};
@@ -56,8 +54,6 @@ export async function GET() {
   const hyperpayConfigured = !!(env.HYPERPAY_URL && env.HYPERPAY_ACCESS_TOKEN && env.HYPERPAY_ENTITY_ID);
   const geideaConfigured = !!(env.GEIDEA_MERCHANT_PUBLIC_KEY && env.GEIDEA_API_PASSWORD);
   const tamaraConfigured = !!env.TAMARA_API_TOKEN;
-  const sendgridConfigured = !!env.SENDGRID_API_KEY;
-  const cloudinaryConfigured = !!(env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? '';
 
@@ -109,20 +105,7 @@ export async function GET() {
       lastEvent: tamaraEvents.data?.[0]?.created_at ?? null,
       eventCount: tamaraEvents.data?.length ?? 0,
     },
-    {
-      name: 'SendGrid Email',
-      service: 'sendgrid',
-      configured: sendgridConfigured,
-      status: sendgridConfigured ? 'operational' : 'pending',
-      description: 'Order confirmations, payment receipts & shipping notifications',
-    },
-    {
-      name: 'Cloudinary',
-      service: 'cloudinary',
-      configured: cloudinaryConfigured,
-      status: cloudinaryConfigured ? 'operational' : 'pending',
-      description: 'Product image storage and CDN delivery',
-    },
+
     {
       name: 'Supabase Database',
       service: 'supabase',
@@ -161,7 +144,7 @@ export async function GET() {
       { name: 'geidea-webhook', url: `${supabaseUrl}/functions/v1/geidea-webhook` },
       { name: 'create-tamara-order', url: `${supabaseUrl}/functions/v1/create-tamara-order` },
       { name: 'tamara-webhook', url: `${supabaseUrl}/functions/v1/tamara-webhook` },
-      { name: 'send-email', url: `${supabaseUrl}/functions/v1/send-email` },
+
     ],
     recentLogs: recentLogs.data ?? [],
   });

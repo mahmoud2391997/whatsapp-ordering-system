@@ -661,8 +661,6 @@ function IntegrationsSection() {
     hyperpay: ShoppingBag,
     geidea: CreditCard,
     tamara: Wallet,
-    sendgrid: Package,
-    cloudinary: Package,
     supabase: Plug,
   };
 
