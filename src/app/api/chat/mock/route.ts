@@ -4,15 +4,6 @@ import type { CustomerType } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
-const GREETING_PATTERNS = /^(مرحبا|السلام|اهلا|هلو|hello|hi|مرحب|مساء|صباح)/i;
-const RETAIL_PATTERNS = /لنفسي|شخصي|فردي|retail|myself|personal/i;
-const SHOP_PATTERNS = /محل|متجر|دكان|shop|store/i;
-const RESTAURANT_PATTERNS = /مطعم|restaurant|كافيه|café|cafe/i;
-const CONFIRM_PATTERNS = /نعم|اكد|تأكيد|confirm|yes|موافق|اوكي|ok/i;
-const COD_PATTERNS = /استلام|cod|كاش|نقد|cash/i;
-const ONLINE_PATTERNS = /إلكتروني|online|بطاقة|card|transfer/i;
-const ADDRESS_PATTERNS = /شارع|طريق|شارع|حى|حي|منطقة|بلك|بلوك|عمار|مبنى|دور|شقة|فيلا|مدينة|القاهرة|الرياض|جدة|الدمام|محافظة|جمهورية|مصر|الكويت|الإمارات|دبي|ابو ظبي|شارع|تقاطع|قطع/i;
-
 interface ChatMessage {
   role: 'customer' | 'bot';
   text: string;
@@ -35,11 +26,10 @@ export async function POST(req: Request) {
   const message: string = body.message;
   const history: ChatMessage[] = body.history ?? [];
   const customerType: CustomerType = body.customerType ?? 'retail';
-
   const messageCount = history.length;
 
-  // ── Greeting ──
-  if (messageCount <= 1 && GREETING_PATTERNS.test(message)) {
+  // ── Fast path: greeting (no AI needed) ──
+  if (messageCount <= 1 && /^(مرحبا|السلام|اهلا|هلو|hello|hi|مرحب|مساء|صباح)/i.test(message)) {
     return NextResponse.json({
       reply: 'وعليكم السلام! اهلاً بك في متجر الخضروات والفواكه الطازجة 🌿\nهل تطلب لنفسك أم لمحل تجاري أم لمطعم؟',
       intent: 'greeting',
@@ -47,18 +37,18 @@ export async function POST(req: Request) {
     });
   }
 
-  // ── Classification ──
+  // ── Fast path: classification (no AI needed) ──
   if (messageCount === 2) {
     let detectedType = customerType;
     let reply = '';
 
-    if (RETAIL_PATTERNS.test(message)) {
+    if (/لنفسي|شخصي|فردي|retail|myself|personal/i.test(message)) {
       detectedType = 'retail';
       reply = 'ممتاز! سعيد بخدمتك. أرسل لنا موقعك للتوصيل أو تصفح المنتجات من القائمة:\n📱 /menu';
-    } else if (SHOP_PATTERNS.test(message)) {
+    } else if (/محل|متجر|دكان|shop|store/i.test(message)) {
       detectedType = 'shop';
       reply = 'رائع! ستحصل على أسعار الجملة الخاصة بالمحلات. أرسل لنا موقعك أو تصفح القائمة:\n📱 /menu';
-    } else if (RESTAURANT_PATTERNS.test(message)) {
+    } else if (/مطعم|restaurant|كافيه|café|cafe/i.test(message)) {
       detectedType = 'restaurant';
       reply = 'ممتاز! ستحصل على أفضل أسعار الجملة للمطاعم. أرسل لنا موقعك أو تصفح القائمة:\n📱 /menu';
     } else {
@@ -68,8 +58,121 @@ export async function POST(req: Request) {
     return NextResponse.json({ reply, intent: 'classification', orderData: null, customerType: detectedType });
   }
 
-  // ── Confirm ──
-  if (CONFIRM_PATTERNS.test(message) && messageCount > 2) {
+  // ── Call Mistral AI for everything else ──
+  const mistralApiKey = process.env.MISTRAL_API_KEY;
+
+  if (!mistralApiKey) {
+    // Fallback to regex if no API key
+    return fallbackReply(message, customerType, history);
+  }
+
+  // Fetch products for context
+  const { data: products } = await supabase
+    .from('products')
+    .select('name, name_ar, unit, retail_price, shop_price, wholesale_price')
+    .order('category');
+
+  const productContext = (products ?? [])
+    .map(p => `${p.name} (${p.name_ar}): retail=${p.retail_price}, shop=${p.shop_price}, restaurant=${p.wholesale_price} per ${p.unit}`)
+    .join('\n');
+
+  const priceKey = customerType === 'shop' ? 'shop_price' : customerType === 'restaurant' ? 'wholesale_price' : 'retail_price';
+
+  const conversationContext = history
+    .map(m => `${m.role === 'bot' ? 'Bot' : 'Customer'}: ${m.text}`)
+    .join('\n');
+
+  const prompt = `You are an AI assistant for a fresh vegetables & fruits WhatsApp ordering system.
+
+Available products and prices:
+${productContext}
+
+Customer type: ${customerType} (use ${priceKey} pricing)
+
+Conversation so far:
+${conversationContext}
+
+Customer latest message: "${message}"
+
+Your tasks:
+1. Determine the intent: greeting | classification | location | order | confirm | payment_choice | menu_link | browse | other
+2. If the message contains a product order (in Arabic or English), extract:
+   - items: array of {name, qty, unit, price} using the correct price tier
+   - total: sum of all items
+   - location: if mentioned
+3. Generate a helpful Arabic reply that matches the conversation flow.
+4. If it's a confirmation and there's an existing order being discussed, acknowledge.
+5. If payment is being chosen: COD → acknowledge cash on delivery; online → send mock payment link.
+6. If the customer wants to browse products or mentions the menu/list, respond with the menu link /menu.
+7. If the customer sends what looks like an address (street, building, district, city), treat it as a location.
+
+Respond ONLY with valid JSON (no markdown, no code blocks):
+{
+  "intent": "order",
+  "reply": "Arabic bot reply here",
+  "orderData": {
+    "items": [{"name": "Tomato", "qty": 5, "unit": "kg", "price": 15}],
+    "total": 75,
+    "location": "Riyadh"
+  }
+}
+If no order, set "orderData": null.
+Always include a clickable menu link /menu in your reply when relevant.`;
+
+  try {
+    const mistralRes = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${mistralApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'mistral-small-latest',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an AI assistant for a fresh vegetables & fruits WhatsApp ordering system. Always respond with valid JSON only, no markdown formatting. Reply in Arabic.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.3,
+        max_tokens: 1024,
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    if (!mistralRes.ok) {
+      console.error('Mistral API error:', mistralRes.status);
+      return fallbackReply(message, customerType, history);
+    }
+
+    const mistralData = await mistralRes.json();
+    const rawText = mistralData?.choices?.[0]?.message?.content ?? '{}';
+
+    let parsed: { intent?: string; reply?: string; orderData?: ParsedOrder | null } = {};
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      parsed = { intent: 'other', reply: rawText, orderData: null };
+    }
+
+    return NextResponse.json({
+      reply: parsed.reply ?? 'شكراً! سنتواصل معك قريباً.',
+      intent: parsed.intent ?? 'other',
+      orderData: parsed.orderData ?? null,
+    });
+  } catch (err) {
+    console.error('Mistral call failed:', err);
+    return fallbackReply(message, customerType, history);
+  }
+}
+
+// Regex fallback when Mistral is unavailable
+function fallbackReply(message: string, customerType: CustomerType, history: ChatMessage[]) {
+  if (/نعم|اكد|تأكيد|confirm|yes|موافق|اوكي|ok/i.test(message) && history.length > 2) {
     return NextResponse.json({
       reply: 'تم تأكيد طلبك! سنبدأ بتجهيزه فوراً. شكراً لك 🙏',
       intent: 'confirm',
@@ -77,8 +180,7 @@ export async function POST(req: Request) {
     });
   }
 
-  // ── Payment choice ──
-  if (COD_PATTERNS.test(message)) {
+  if (/استلام|cod|كاش|نقد|cash/i.test(message)) {
     return NextResponse.json({
       reply: 'ممتاز، الدفع عند الاستلام. تم تسجيل طلبك وسنتواصل معك لتأكيد التفاصيل ✅',
       intent: 'payment_choice',
@@ -86,37 +188,7 @@ export async function POST(req: Request) {
     });
   }
 
-  if (ONLINE_PATTERNS.test(message)) {
-    return NextResponse.json({
-      reply: ' الدفع الإلكتروني:\nhttps://pay.example.com/order/12345\n\nيرجى إتمام الدفع وسنؤكد طلبك فوراً ✅',
-      intent: 'payment_choice',
-      orderData: null,
-    });
-  }
-
-  // ── Location detection (keyword prefix OR looks like an address) ──
-  if (/^(موقع|location|address|عنوان|العنوان|city|مدينة)\s*[:：]?\s*/i.test(message)) {
-    const location = message.replace(/^(موقع|location|address|عنوان|العنوان|city|مدينة)\s*[:：]?\s*/i, '').trim();
-    return NextResponse.json({
-      reply: `تم استلام موقعك: ${location}\n\nيمكنك تصفح المنتجات من القائمة:\n📱 /menu\n\nأو أرسل لنا طلبك مباشرة مثل: "5 كيلو طماطم"`,
-      intent: 'location',
-      orderData: { items: [], total: 0, location },
-    });
-  }
-
-  // Plain address without keyword (after being asked for location)
-  const lastBotMsg = [...history].reverse().find(m => m.role === 'bot')?.text ?? '';
-  const askedForLocation = /موقعك|التوصيل|location/i.test(lastBotMsg);
-  if (askedForLocation && ADDRESS_PATTERNS.test(message)) {
-    return NextResponse.json({
-      reply: `تم استلام موقعك: ${message.trim()}\n\nيمكنك تصفح المنتجات من القائمة:\n📱 /menu\n\nأو أرسل لنا طلبك مباشرة مثل: "5 كيلو طماطم"`,
-      intent: 'location',
-      orderData: { items: [], total: 0, location: message.trim() },
-    });
-  }
-
-  // ── Browse products ──
-  if (/استعراض|عرض|منيو|menu|products|المنتجات|القائمة|القايمة|بدي اشوف|ابي اشوف|اريد استعراض|browse|قائمة|قايمة/i.test(message)) {
+  if (/استعراض|عرض|منيو|menu|products|المنتجات|القائمة|القايمة|قائمة|قايمة/i.test(message)) {
     return NextResponse.json({
       reply: '🛒 اختر المنتجات المطلوبة من القائمة:\n\n📱 افتح القائمة:\n/menu\n\nأو اكتب طلبك مباشرة مثل: "5 كيلو طماطم و 3 كيلو خيار"',
       intent: 'menu_link',
@@ -124,9 +196,8 @@ export async function POST(req: Request) {
     });
   }
 
-  // ── Try to parse an order from the message ──
+  // Try basic order parsing
   const orderData = parseOrderFromText(message, customerType);
-
   if (orderData) {
     const itemsList = orderData.items.map(i => `• ${i.name} × ${i.qty} ${i.unit} = ${(i.price * i.qty).toFixed(2)} EGP`).join('\n');
     return NextResponse.json({
@@ -136,7 +207,6 @@ export async function POST(req: Request) {
     });
   }
 
-  // ── Default fallback ──
   return NextResponse.json({
     reply: 'يمكنك تصفح جميع المنتجات والأسعار من القائمة:\n📱 /menu\n\nأو اكتب طلبك مباشرة مثل: "5 كيلو طماطم و 3 كيلو خيار"',
     intent: 'other',
@@ -168,7 +238,6 @@ function parseOrderFromText(text: string, customerType: CustomerType): ParsedOrd
   const items: ParsedOrder['items'] = [];
   const priceKey = customerType as 'retail' | 'shop' | 'restaurant';
 
-  // Split by و / , / and
   const segments = text.split(/\s*(?:و|,|and|،)\s*/i);
 
   for (const segment of segments) {
