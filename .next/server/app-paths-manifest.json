@@ -1,6 +1,6 @@
 {
+  "/api/chat/mock/route": "app/api/chat/mock/route.js",
   "/menu/page": "app/menu/page.js",
-  "/page": "app/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/api/data/route": "app/api/data/route.js"
+  "/menu/[customer-id]/page": "app/menu/[customer-id]/page.js",
+  "/dashboard/page": "app/dashboard/page.js"
 }
