@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import WhatsAppChat from '@/components/WhatsAppChat';
+import MockChat from '@/components/MockChat';
 import type { Product, Customer, Order, OrderItem, Conversation, OrderStatus, CustomerType, MenuPage } from '@/lib/types';
 
 interface IntegrationInfo {
@@ -37,7 +38,7 @@ interface IntegrationData {
   recentLogs: Array<{ level: string; service: string; created_at: string }>;
 }
 
-type DashSection = 'overview' | 'orders' | 'conversations' | 'customers' | 'inventory' | 'integrations';
+type DashSection = 'overview' | 'orders' | 'conversations' | 'customers' | 'inventory' | 'integrations' | 'chatbot';
 
 const statusConfig: Record<OrderStatus, { label: string; color: string; icon: typeof Clock }> = {
   pending:    { label: 'Pending',    color: 'bg-amber-100 text-amber-700',   icon: Clock },
@@ -92,6 +93,7 @@ export default function DashboardPage() {
     { id: 'customers',      label: 'Customers',      icon: Users },
     { id: 'inventory',      label: 'Inventory',      icon: Package },
     { id: 'integrations',   label: 'Integrations',   icon: Plug },
+    { id: 'chatbot',        label: 'AI Bot Test',     icon: MessageSquare },
   ];
 
   const goMenu = useCallback(() => { window.location.href = '/menu'; }, []);
@@ -181,6 +183,7 @@ export default function DashboardPage() {
           {section === 'customers'     && <CustomersSection customers={customers} />}
           {section === 'inventory'     && <InventorySection products={products} />}
           {section === 'integrations'  && <IntegrationsSection />}
+          {section === 'chatbot'       && <ChatbotSection />}
         </main>
       </div>
     </div>
@@ -978,6 +981,21 @@ function MenuPagesSection({ menuPages }: { menuPages: MenuPage[] }) {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ── AI Bot Test ── */
+function ChatbotSection() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">AI Bot Test</h1>
+        <p className="text-gray-500 text-sm mt-0.5">Mock WhatsApp conversation to test the AI bot flow</p>
+      </div>
+      <div className="max-w-lg">
+        <MockChat />
       </div>
     </div>
   );
