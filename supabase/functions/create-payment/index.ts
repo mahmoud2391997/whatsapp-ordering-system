@@ -46,8 +46,8 @@ Deno.serve(async (req: Request) => {
     formData.append("merchantInvoiceId", orderId);
     formData.append("customer.email", customerEmail ?? "");
     formData.append("customer.givenName", customerName ?? "");
-    formData.append("webhookUrl", HYPERPAY_WEBHOOK_URL);
     formData.append("shopperResultUrl", `${Deno.env.get("SUPABASE_URL")}/functions/v1/hyperpay-webhook`);
+    formData.append("asyncNotificationUrl", HYPERPAY_WEBHOOK_URL);
 
     const res = await fetch(`${HYPERPAY_URL}/v1/checkouts`, {
       method: "POST",

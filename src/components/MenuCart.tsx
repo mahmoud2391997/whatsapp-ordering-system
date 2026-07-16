@@ -78,6 +78,76 @@ export default function MenuCart({ products, customerName, customerType, custome
     setError(null);
 
     try {
+      // For online payment methods, create order first then initiate payment
+      if (paymentMethod === 'geidea' || paymentMethod === 'tamara' || paymentMethod === 'online') {
+        // Step 1: Create the order in the database via checkout API
+        const checkoutRes = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customerId,
+            customerName: name,
+            phone,
+            items: cart.map(i => ({
+              product_id: i.product.id,
+              product_name: i.product.name,
+              qty: i.qty,
+              unit: i.product.unit,
+              unit_price: Number(i.product[priceKey]),
+            })),
+            total: cartTotal,
+            customerType: 'retail',
+            location: location || undefined,
+            paymentMethod,
+          }),
+        });
+
+        const checkoutData = await checkoutRes.json();
+        if (!checkoutRes.ok) throw new Error(checkoutData.error ?? 'Checkout failed');
+
+        const orderId = checkoutData.orderId;
+
+        // Step 2: Create the payment session
+        const paymentMethodForGateway = paymentMethod === 'online' ? 'hyperpay' : paymentMethod;
+        const res = await fetch('/api/payment/redirect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId,
+            amount: cartTotal,
+            currency: 'SAR',
+            paymentMethod: paymentMethodForGateway,
+            customerEmail: '',
+            customerName: name,
+            customerPhone: phone,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          if (data.error && data.error.includes('credentials not configured')) {
+            throw new Error('Payment gateway credentials not configured. Please use Cash on Delivery for now.');
+          }
+          throw new Error(data.error ?? 'Payment session creation failed');
+        }
+
+        // HyperPay: redirect to the widget page
+        if (paymentMethod === 'online' && data.checkoutId) {
+          window.location.href = `/payment/hyperpay?checkoutId=${data.checkoutId}&orderId=${orderId}`;
+          return;
+        }
+
+        // Geidea / Tamara: redirect to their hosted checkout
+        if (data.redirectUrl) {
+          window.location.href = data.redirectUrl;
+          return;
+        } else {
+          throw new Error('No redirect URL returned from payment gateway');
+        }
+      }
+
+      // For COD, use the regular checkout API
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -103,12 +173,6 @@ export default function MenuCart({ products, customerName, customerType, custome
 
       if (!res.ok) {
         throw new Error(data.error ?? 'Checkout failed');
-      }
-
-      // Redirect to payment page for Geidea or Tamara
-      if (data.paymentSession?.checkoutUrl) {
-        window.location.href = data.paymentSession.checkoutUrl;
-        return;
       }
 
       setOrderResult({ orderId: data.orderId, whatsappLink: data.whatsappLink });
