@@ -142,40 +142,27 @@ export async function POST(req: Request) {
 
 function parseOrderFromText(text: string, products: Array<{ name: string; name_ar: string; unit: string; retail_price: number; shop_price: number; wholesale_price: number }>, priceKey: string): ParsedOrder | null {
   const items: ParsedOrder['items'] = [];
+  const usedProducts = new Set<string>();
 
-  const qtyPatterns = [
-    /(\d+)\s*(كيلو|كجم|kg|kilo)/i,
-    /(\d+)\s*(قطعة|حبة|piece|pcs)/i,
-    /(\d+)\s*(حزمة|باقات|bunch)/i,
-  ];
+  // Split text by common separators (و, and, commas)
+  const segments = text.split(/\s*(?:و|,|and|،)\s*/i);
 
-  for (const product of products) {
-    const nameRegex = new RegExp(`(${product.name}|${product.name_ar})`, 'i');
-    if (!nameRegex.test(text)) continue;
+  for (const segment of segments) {
+    // Try to find a number in this segment
+    const numMatch = segment.match(/(\d+)/);
+    const qty = numMatch ? parseInt(numMatch[1]) : 1;
 
-    let qty = 1;
-    let unit = product.unit;
+    for (const product of products) {
+      if (usedProducts.has(product.name)) continue;
 
-    for (const pattern of qtyPatterns) {
-      const match = text.match(new RegExp(`(\\d+)\\s*.*(${product.name}|${product.name_ar}).*`, 'i')) ??
-                    text.match(new RegExp(`(${product.name}|${product.name_ar}).*?(\\d+)`, 'i'));
-      if (match) {
-        const numMatch = text.match(/(\d+)/);
-        if (numMatch) {
-          qty = parseInt(numMatch[1]);
-          break;
-        }
-      }
+      const nameRegex = new RegExp(`(${product.name}|${product.name_ar})`, 'i');
+      if (!nameRegex.test(segment)) continue;
+
+      const price = Number(product[priceKey as keyof typeof product]);
+      items.push({ name: product.name, qty, unit: product.unit, price });
+      usedProducts.add(product.name);
+      break;
     }
-
-    // Try to extract qty near the product name
-    const nearMatch = text.match(new RegExp(`(\\d+)\\s*(?:كيلو|كجم|kg)?\\s*(?:${product.name}|${product.name_ar})|(?:${product.name}|${product.name_ar})\\s*(\\d+)`, 'i'));
-    if (nearMatch) {
-      qty = parseInt(nearMatch[1] || nearMatch[2]);
-    }
-
-    const price = Number(product[priceKey as keyof typeof product]);
-    items.push({ name: product.name, qty, unit: product.unit, price });
   }
 
   if (items.length === 0) return null;
