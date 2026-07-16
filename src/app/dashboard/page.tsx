@@ -44,6 +44,7 @@ const statusConfig: Record<OrderStatus, { label: string; color: string; icon: ty
   confirmed:  { label: 'Confirmed',  color: 'bg-blue-100 text-blue-700',     icon: CheckCircle2 },
   delivering: { label: 'Delivering', color: 'bg-purple-100 text-purple-700', icon: Truck },
   delivered:  { label: 'Delivered',  color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle2 },
+  completed:  { label: 'Completed',  color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle2 },
   cancelled:  { label: 'Cancelled',  color: 'bg-red-100 text-red-700',       icon: XCircle },
 };
 

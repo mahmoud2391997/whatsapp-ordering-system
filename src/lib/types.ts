@@ -1,5 +1,5 @@
 export type CustomerType = 'retail' | 'shop' | 'restaurant';
-export type OrderStatus = 'pending' | 'confirmed' | 'delivering' | 'delivered' | 'cancelled';
+export type OrderStatus = 'pending' | 'confirmed' | 'delivering' | 'delivered' | 'completed' | 'cancelled';
 export type PaymentStatus = 'unpaid' | 'paid' | 'cod' | 'geidea_pending' | 'tamara_pending';
 export type PaymentMethod = 'cod' | 'online' | 'geidea' | 'tamara';
 
