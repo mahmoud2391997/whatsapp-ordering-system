@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-  const supabase = createServerClient();
+  // Use service role key for database write operations
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
 
   const formData = await req.formData();
   const file = formData.get('file') as File | null;
@@ -44,7 +48,11 @@ export async function POST(req: Request) {
   }
 
   const { data, error } = await supabase.from('products').insert(products).select();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('[v0] Database insert error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
+  console.log(`[v0] Successfully imported ${data.length} products`);
   return NextResponse.json({ imported: data.length, products: data }, { status: 201 });
 }
