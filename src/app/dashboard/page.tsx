@@ -580,8 +580,20 @@ function InventorySection({ products, onRefresh }: { products: Product[]; onRefr
       const fd = new FormData();
       fd.append('file', file);
       const res = await fetch('/api/products/upload', { method: 'POST', body: fd });
+      
+      // Handle empty response
+      if (!res.ok) {
+        let errorMsg = 'Upload failed';
+        try {
+          const json = await res.json();
+          errorMsg = json.error || errorMsg;
+        } catch {
+          errorMsg = `Upload failed with status ${res.status}`;
+        }
+        throw new Error(errorMsg);
+      }
+      
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
       alert(`Imported ${json.imported} products`);
       onRefresh();
     } catch (err: unknown) { alert(err instanceof Error ? err.message : 'Upload failed'); } finally {
