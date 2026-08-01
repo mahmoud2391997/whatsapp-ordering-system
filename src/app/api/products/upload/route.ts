@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { prisma } from '@/lib/db';
 import * as XLSX from 'xlsx';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-  const supabase = createServerClient();
-
   const formData = await req.formData();
   const file = formData.get('file') as File | null;
   if (!file) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
@@ -28,23 +26,21 @@ export async function POST(req: Request) {
   const products = rows
     .map(r => ({
       name: String(r.name || '').trim(),
-      name_ar: String(r.name_ar || '').trim(),
+      nameAr: String(r.name_ar || '').trim(),
       category: validCategories.includes(String(r.category)) ? String(r.category) : 'vegetables',
       unit: String(r.unit || 'kg').trim(),
-      retail_price: Number(r.retail_price) || 0,
-      shop_price: Number(r.shop_price) || 0,
-      wholesale_price: Number(r.wholesale_price) || 0,
+      retailPrice: Number(r.retail_price) || 0,
+      shopPrice: Number(r.shop_price) || 0,
+      wholesalePrice: Number(r.wholesale_price) || 0,
       stock: Number(r.stock) || 0,
-      image_url: String(r.image_url || 'https://images.unsplash.com/photo-1592924357228-3674a0f6468d?w=400').trim(),
+      imageUrl: String(r.image_url || 'https://images.unsplash.com/photo-1592924357228-3674a0f6468d?w=400').trim(),
     }))
-    .filter(p => p.name && p.name_ar);
+    .filter(p => p.name && p.nameAr);
 
   if (!products.length) {
     return NextResponse.json({ error: 'No valid products found' }, { status: 400 });
   }
 
-  const { data, error } = await supabase.from('products').insert(products).select();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  return NextResponse.json({ imported: data.length, products: data }, { status: 201 });
+  const created = await prisma.product.createMany({ data: products });
+  return NextResponse.json({ imported: created.count, products }, { status: 201 });
 }

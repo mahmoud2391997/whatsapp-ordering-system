@@ -1,17 +1,10 @@
-import { createServerClient } from '@/lib/supabase/server';
-import type { Product } from '@/lib/types';
+import { getProducts } from '@/lib/data';
 import MenuCart from '@/components/MenuCart';
 
 export const dynamic = 'force-dynamic';
 
 export default async function MenuPage() {
-  const supabase = createServerClient();
-
-  const { data: products } = await supabase
-    .from('products')
-    .select('*')
-    .order('category')
-    .order('name');
+  const products = await getProducts();
 
   return (
     <div>
@@ -19,7 +12,7 @@ export default async function MenuPage() {
         Admin Preview — <a href="/dashboard" className="underline hover:text-emerald-200">Back to Dashboard</a>
       </div>
       <MenuCart
-        products={(products ?? []) as Product[]}
+        products={products}
         customerName="Preview"
         customerType="retail"
         customerId=""

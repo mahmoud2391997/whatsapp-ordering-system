@@ -1,16 +1,22 @@
 export async function sendWhatsApp(to: string, text: string): Promise<boolean> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? '';
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
-  if (!supabaseUrl) return false;
+  const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID ?? '';
+  const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN ?? '';
+  if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) return false;
 
   try {
-    const res = await fetch(`${supabaseUrl}/functions/v1/whatsapp-send`, {
+    const formattedPhone = to.replace(/[^0-9]/g, '');
+    const res = await fetch(`https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${serviceKey}`,
+        'Authorization': `Bearer ${ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ to, text }),
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: formattedPhone,
+        type: 'text',
+        text: { body: text },
+      }),
     });
     return res.ok;
   } catch {

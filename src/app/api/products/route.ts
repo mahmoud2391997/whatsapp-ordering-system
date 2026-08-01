@@ -1,35 +1,42 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { prisma } from '@/lib/db';
+import { getProducts } from '@/lib/data';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const supabase = createServerClient();
-  const { data, error } = await supabase.from('products').select('*').order('category');
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+  const products = await getProducts();
+  const raw = products.map(p => ({
+    id: p.id,
+    name: p.name,
+    nameAr: p.name_ar,
+    category: p.category,
+    unit: p.unit,
+    retailPrice: p.retail_price,
+    shopPrice: p.shop_price,
+    wholesalePrice: p.wholesale_price,
+    stock: p.stock,
+    imageUrl: p.image_url,
+  }));
+  return NextResponse.json(raw);
 }
 
 export async function POST(req: Request) {
-  const supabase = createServerClient();
   const body = await req.json();
 
-  const { data, error } = await supabase
-    .from('products')
-    .insert({
+  const product = await prisma.product.create({
+    data: {
       name: body.name,
-      name_ar: body.name_ar,
+      nameAr: body.name_ar,
       category: body.category,
       unit: body.unit,
-      retail_price: Number(body.retail_price),
-      shop_price: Number(body.shop_price),
-      wholesale_price: Number(body.wholesale_price),
+      retailPrice: Number(body.retail_price),
+      shopPrice: Number(body.shop_price),
+      wholesalePrice: Number(body.wholesale_price),
       stock: Number(body.stock),
-      image_url: body.image_url || 'https://images.unsplash.com/photo-1592924357228-3674a0f6468d?w=400',
-    })
-    .select()
-    .single();
+      imageUrl: body.image_url || 'https://images.unsplash.com/photo-1592924357228-3674a0f6468d?w=400',
+    },
+  });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data, { status: 201 });
+  return NextResponse.json(product, { status: 201 });
 }

@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-  const supabase = createServerClient();
   const body = await req.json();
 
   const { orderId, amount, currency = 'SAR', paymentMethod, customerEmail, customerName, customerPhone } = body;
@@ -17,7 +15,7 @@ export async function POST(req: Request) {
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? '';
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 
   let endpoint = '';
   if (paymentMethod === 'geidea') {
@@ -34,48 +32,25 @@ export async function POST(req: Request) {
   }
 
   try {
-    console.log('Calling payment endpoint:', endpoint);
-    console.log('Request body:', { orderId, amount, currency, paymentMethod });
-    
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${serviceRoleKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        orderId,
-        amount,
-        currency,
-        customerEmail,
-        customerName,
-        customerPhone,
-      }),
+      body: JSON.stringify({ orderId, amount, currency, customerEmail, customerName, customerPhone }),
     });
 
     const responseText = await response.text();
-    console.log('Payment endpoint response status:', response.status);
-    console.log('Payment endpoint response:', responseText);
 
     let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch {
-      data = { error: responseText };
-    }
+    try { data = JSON.parse(responseText); } catch { data = { error: responseText }; }
 
     if (!response.ok) {
-      // Check if it's a credential configuration error
       if (data.error && (data.error.includes('Key length is zero') || data.error.includes('merchant') || data.error.includes('password') || data.details?.message === 'Invalid credentials')) {
-        return NextResponse.json(
-          { error: 'Payment gateway credentials not configured. Please configure real payment gateway credentials in .env.local or use Cash on Delivery.' },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: 'Payment gateway credentials not configured. Please configure real payment gateway credentials or use Cash on Delivery.' }, { status: 500 });
       }
-      return NextResponse.json(
-        { error: 'Payment session creation failed', details: data },
-        { status: response.status }
-      );
+      return NextResponse.json({ error: 'Payment session creation failed', details: data }, { status: response.status });
     }
 
     let redirectUrl = null;
@@ -89,18 +64,11 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({
-      success: true,
-      redirectUrl,
-      checkoutId,
-      paymentMethod,
+      success: true, redirectUrl, checkoutId, paymentMethod,
       sessionId: data.sessionId || data.tamaraOrderId || data.checkoutId,
     });
-
   } catch (error) {
     console.error('Payment redirect error:', error);
-    return NextResponse.json(
-      { error: 'Failed to create payment session' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create payment session' }, { status: 500 });
   }
 }

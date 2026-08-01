@@ -62,6 +62,7 @@ export default function DashboardPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [dbActive, setDbActive] = useState(true);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
@@ -73,8 +74,9 @@ export default function DashboardPage() {
       setCustomers(data.customers ?? []);
       setOrders(data.orders ?? []);
       setConversations(data.conversations ?? []);
+      setDbActive(data.db?.active ?? true);
     } catch {
-      // show empty state
+      setDbActive(false);
     } finally {
       setLoading(false);
     }
@@ -156,6 +158,12 @@ export default function DashboardPage() {
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
+        {!dbActive && (
+          <div className="bg-amber-500 text-white text-xs font-medium px-4 py-1.5 flex items-center gap-2 justify-center">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            Database unavailable — showing demo data.
+          </div>
+        )}
         <header className="bg-white border-b border-gray-200 px-4 sm:px-6 h-14 flex items-center gap-3 sticky top-0 z-20">
           <button className="lg:hidden text-gray-500" onClick={() => setSidebarOpen(true)}>
             <Menu className="w-5 h-5" />

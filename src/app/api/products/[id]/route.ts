@@ -1,36 +1,30 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
-  const supabase = createServerClient();
   const body = await req.json();
 
-  const { data, error } = await supabase
-    .from('products')
-    .update({
+  const product = await prisma.product.update({
+    where: { id: params.id },
+    data: {
       name: body.name,
-      name_ar: body.name_ar,
+      nameAr: body.name_ar,
       category: body.category,
       unit: body.unit,
-      retail_price: Number(body.retail_price),
-      shop_price: Number(body.shop_price),
-      wholesale_price: Number(body.wholesale_price),
+      retailPrice: Number(body.retail_price),
+      shopPrice: Number(body.shop_price),
+      wholesalePrice: Number(body.wholesale_price),
       stock: Number(body.stock),
-      image_url: body.image_url,
-    })
-    .eq('id', params.id)
-    .select()
-    .single();
+      imageUrl: body.image_url,
+    },
+  });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+  return NextResponse.json(product);
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  const supabase = createServerClient();
-  const { error } = await supabase.from('products').delete().eq('id', params.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await prisma.product.delete({ where: { id: params.id } });
   return NextResponse.json({ success: true });
 }
