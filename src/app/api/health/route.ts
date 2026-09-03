@@ -36,11 +36,12 @@ export async function GET() {
   }
 
   // 4. Product count
+  const productStart = Date.now();
   try {
     const count = await prisma.product.count();
-    checks.product_count = { ok: true, latencyMs: count };
+    checks.product_count = { ok: true, latencyMs: Date.now() - productStart };
   } catch (err) {
-    checks.product_count = { ok: false, error: String(err) };
+    checks.product_count = { ok: false, error: String(err), latencyMs: Date.now() - productStart };
   }
 
   const allOk = Object.values(checks).every(c => c.ok);

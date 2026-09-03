@@ -35,6 +35,7 @@ export default function MenuCart({ products, customerName, customerType, custome
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [location, setLocation] = useState('');
+  const [customerConfirmed, setCustomerConfirmed] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod');
   const [submitting, setSubmitting] = useState(false);
   const [orderResult, setOrderResult] = useState<{ orderId: string; whatsappLink: string } | null>(null);
@@ -74,6 +75,14 @@ export default function MenuCart({ products, customerName, customerType, custome
       setError('Please enter your name and WhatsApp number');
       return;
     }
+    if (!location.trim()) {
+      setError('Please enter your complete delivery address');
+      return;
+    }
+    if (!customerConfirmed) {
+      setError('Please confirm that all order details are correct');
+      return;
+    }
     setSubmitting(true);
     setError(null);
 
@@ -99,6 +108,7 @@ export default function MenuCart({ products, customerName, customerType, custome
             customerType: 'retail',
             location: location || undefined,
             paymentMethod,
+            customerConfirmed,
           }),
         });
 
@@ -166,6 +176,7 @@ export default function MenuCart({ products, customerName, customerType, custome
           customerType: 'retail',
           location: location || undefined,
           paymentMethod,
+          customerConfirmed,
         }),
       });
 
@@ -510,6 +521,19 @@ export default function MenuCart({ products, customerName, customerType, custome
                   {error}
                 </div>
               )}
+
+              <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={customerConfirmed}
+                  onChange={e => setCustomerConfirmed(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-emerald-600"
+                />
+                <span>I confirm the products, quantities, total, delivery address, and payment method are correct.</span>
+              </label>
+              <p className="text-xs text-gray-400">
+                Orders are prepared after business confirmation. Cancellation requests are accepted before preparation; approved cancellations are final.
+              </p>
 
               <button
                 onClick={handleCheckout}

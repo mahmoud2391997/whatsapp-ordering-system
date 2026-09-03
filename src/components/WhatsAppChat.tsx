@@ -262,8 +262,8 @@ function NewConversationModal({ onClose, onCreated }: { onClose: () => void; onC
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ customerName: name.trim(), phone: phone.trim(), customerType, message: message.trim() || undefined }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Failed to create conversation');
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? `Failed to create conversation (${res.status})`);
       onCreated(data.conversation.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');

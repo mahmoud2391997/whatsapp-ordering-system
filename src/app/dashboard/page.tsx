@@ -319,6 +319,9 @@ function OrdersSection({ orders }: { orders: Order[] }) {
   const [filter, setFilter] = useState<OrderStatus | 'all'>('all');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [confirmMsg, setConfirmMsg] = useState('');
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [orderError, setOrderError] = useState<string | null>(null);
   const filtered = filter === 'all' ? orders : orders.filter(o => o.status === filter);
 
   const handleConfirmOrder = async (orderId: string) => {
@@ -332,9 +335,29 @@ function OrdersSection({ orders }: { orders: Order[] }) {
         setConfirmingId(null);
         setConfirmMsg('');
         window.location.reload();
+      } else {
+        const data = await res.json().catch(() => null);
+        setOrderError(data?.error ?? 'Failed to confirm order');
       }
     } catch (err) {
-      console.error('Failed to confirm order:', err);
+      setOrderError(err instanceof Error ? err.message : 'Failed to confirm order');
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    if (!cancellingId || !cancelReason.trim()) return;
+    try {
+      const res = await fetch(`/api/orders/${cancellingId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelled', reason: cancelReason.trim() }),
+      });
+      if (res.ok) window.location.reload();
+      else {
+        const data = await res.json().catch(() => null);
+        setOrderError(data?.error ?? 'Failed to cancel order');
+      }
+    } catch (err) {
+      setOrderError(err instanceof Error ? err.message : 'Failed to cancel order');
     }
   };
 
@@ -342,7 +365,7 @@ function OrdersSection({ orders }: { orders: Order[] }) {
     <div className="space-y-5">
       <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
       <div className="flex flex-wrap gap-2">
-        {(['all', 'pending', 'confirmed', 'delivering', 'delivered'] as const).map(f => (
+        {(['all', 'pending', 'confirmed', 'delivering', 'delivered', 'completed', 'cancelled'] as const).map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -415,6 +438,14 @@ function OrdersSection({ orders }: { orders: Order[] }) {
                           Confirm
                         </button>
                       )}
+                      {['pending', 'confirmed', 'delivering'].includes(order.status) && (
+                        <button
+                          onClick={() => { setCancellingId(order.id); setCancelReason(''); setOrderError(null); }}
+                          className="ml-2 text-xs px-3 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition-colors font-medium"
+                        >
+                          Cancel
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -423,6 +454,8 @@ function OrdersSection({ orders }: { orders: Order[] }) {
           </table>
         </div>
       </div>
+
+      {orderError && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{orderError}</p>}
 
       {/* Confirmation modal */}
       {confirmingId && (
@@ -454,6 +487,26 @@ function OrdersSection({ orders }: { orders: Order[] }) {
                 <Check className="w-4 h-4" />
                 Confirm & Notify
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancellingId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="font-bold text-gray-900 text-lg mb-2">Cancel Order</h3>
+            <p className="text-gray-500 text-sm mb-4">Cancellation cannot be undone. The customer will be notified with the reason.</p>
+            <textarea
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              placeholder="Cancellation reason"
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-300"
+            />
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setCancellingId(null)} className="flex-1 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg">Keep Order</button>
+              <button onClick={handleCancelOrder} disabled={!cancelReason.trim()} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg disabled:opacity-50">Cancel Order</button>
             </div>
           </div>
         </div>

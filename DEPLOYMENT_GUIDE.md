@@ -9,7 +9,33 @@
 
 ---
 
-## Step 1: Apply Database Migrations to Supabase
+## Step 1: Provision the Production Database
+
+For a database running on the same VPS, install PostgreSQL with the VPS setup
+script, then create a dedicated database and user:
+
+```bash
+sudo -u postgres createuser --pwprompt fresh_greens
+sudo -u postgres createdb -O fresh_greens fresh_greens
+```
+
+Set these values in `/var/www/fresh-greens/.env`:
+
+```dotenv
+DATABASE_URL=postgresql://fresh_greens:<password>@127.0.0.1:5432/fresh_greens
+DIRECT_DATABASE_URL=postgresql://fresh_greens:<password>@127.0.0.1:5432/fresh_greens
+```
+
+Initialize the base schema once after cloning the application:
+
+```bash
+npx prisma generate
+npx prisma db push
+```
+
+Future deployments use `npx prisma migrate deploy` through `deploy.sh`.
+
+## Step 2: Supabase Migrations (Only If Using Supabase)
 
 The project includes three migrations that create the complete database schema:
 

@@ -109,6 +109,7 @@ Your tasks:
 5. If payment is being chosen: COD → acknowledge cash on delivery; online → send mock payment link.
 6. If the customer wants to browse products or mentions the menu/list, respond with the menu link /menu.
 7. If the customer sends what looks like an address (street, building, district, city), treat it as a location and repeat back ONLY the exact address the customer wrote. DO NOT add, guess, or fabricate any city, district, or landmark that the customer did not say.
+8. Follow this order workflow strictly: after receiving products, collect the delivery address, then ask for payment method (cash on delivery or online), then show the final summary and ask for confirmation. Never confirm or say the order is registered when either the address or payment method is missing.
 
 Respond ONLY with valid JSON (no markdown, no code blocks):
 {
@@ -146,6 +147,9 @@ Always include a clickable menu link /menu in your reply when relevant.`;
     let parsed: { intent?: string; reply?: string; orderData?: ParsedOrder | null } = {};
     try { parsed = JSON.parse(rawText); } catch { parsed = { intent: 'other', reply: rawText, orderData: null }; }
 
+    const workflowReply = enforceWorkflow(message, history, parsed);
+    if (workflowReply) return workflowReply;
+
     return NextResponse.json({
       reply: parsed.reply ?? 'شكراً! سنتواصل معك قريباً.',
       intent: parsed.intent ?? 'other',
@@ -156,16 +160,52 @@ Always include a clickable menu link /menu in your reply when relevant.`;
   }
 }
 
+function enforceWorkflow(
+  message: string,
+  history: ChatMessage[],
+  parsed: { intent?: string; reply?: string; orderData?: ParsedOrder | null },
+) {
+  const isConfirmation = /نعم|اكد|تأكيد|confirm|yes|موافق|اوكي|ok/i.test(message);
+  const hasOrder = !!parsed.orderData || history.some(m => m.role === 'bot' && /طلب|منتج|كيلو|مجموع|إجمالي|total/i.test(m.text));
+  if (!hasOrder) return null;
+
+  const hasLocation = history.some(m => m.role === 'customer' && isLocationMessage(m.text));
+  const hasPayment = history.some(m => m.role === 'customer' && /استلام|cod|كاش|نقد|cash|اونلاين|online|بطاقة|فيزا|دفع/i.test(m.text));
+
+  if ((isConfirmation || parsed.intent === 'confirm') && !hasLocation) {
+    return NextResponse.json({ reply: 'قبل تأكيد الطلب، من فضلك أرسل عنوان التوصيل بالتفصيل (المنطقة، الشارع، ورقم المبنى).', intent: 'location', orderData: null });
+  }
+  if ((isConfirmation || parsed.intent === 'confirm') && !hasPayment) {
+    return NextResponse.json({ reply: 'كيف تفضل الدفع؟ الدفع عند الاستلام أم الدفع الإلكتروني؟', intent: 'payment_choice', orderData: null });
+  }
+  if (parsed.intent === 'payment_choice' && hasLocation && !isConfirmation) {
+    return NextResponse.json({ reply: 'تم اختيار طريقة الدفع ✅\nهل تؤكد الطلب بهذه التفاصيل؟ (نعم/لا)', intent: 'payment_choice', orderData: null });
+  }
+  return null;
+}
+
 function fallbackReply(message: string, customerType: CustomerType, history: ChatMessage[]) {
   if (/نعم|اكد|تأكيد|confirm|yes|موافق|اوكي|ok/i.test(message) && history.length > 2) {
+    const hasLocation = history.some(m => m.role === 'customer' && isLocationMessage(m.text));
+    const hasPayment = history.some(m => m.role === 'customer' && /استلام|cod|كاش|نقد|cash|اونلاين|online|بطاقة|فيزا|دفع/i.test(m.text));
+    if (!hasLocation) {
+      return NextResponse.json({ reply: 'قبل تأكيد الطلب، من فضلك أرسل عنوان التوصيل بالتفصيل (المنطقة، الشارع، ورقم المبنى).', intent: 'location', orderData: null });
+    }
+    if (!hasPayment) {
+      return NextResponse.json({ reply: 'كيف تفضل الدفع؟ الدفع عند الاستلام أم الدفع الإلكتروني؟', intent: 'payment_choice', orderData: null });
+    }
     return NextResponse.json({ reply: 'تم تأكيد طلبك! سنبدأ بتجهيزه فوراً. شكراً لك 🙏', intent: 'confirm', orderData: null });
   }
   if (/استلام|cod|كاش|نقد|cash/i.test(message)) {
-    return NextResponse.json({ reply: 'ممتاز، الدفع عند الاستلام. تم تسجيل طلبك وسنتواصل معك لتأكيد التفاصيل ✅', intent: 'payment_choice', orderData: null });
+    const hasOrder = history.some(m => m.role === 'bot' && /طلب|مجموع|إجمالي|total/i.test(m.text));
+    return NextResponse.json({
+      reply: hasOrder ? 'ممتاز، الدفع عند الاستلام ✅\nهل تؤكد الطلب بهذه التفاصيل؟ (نعم/لا)' : 'ممتاز، الدفع عند الاستلام ✅',
+      intent: 'payment_choice', orderData: null,
+    });
   }
   if (isLocationMessage(message)) {
     return NextResponse.json({
-      reply: `شكراً! تم تسجيل موقعك: ${message.trim()} ✅\nهل تريد تأكيد طلبك الحالي أم إضافة منتجات أخرى؟\n📱 /menu`,
+      reply: `شكراً! تم تسجيل موقعك: ${message.trim()} ✅\nكيف تفضل الدفع؟ الدفع عند الاستلام أم الدفع الإلكتروني؟`,
       intent: 'location', orderData: null, location: message.trim(),
     });
   }
@@ -180,7 +220,7 @@ function fallbackReply(message: string, customerType: CustomerType, history: Cha
   if (orderData) {
     const itemsList = orderData.items.map(i => `• ${i.name} × ${i.qty} ${i.unit} = ${(i.price * i.qty).toFixed(2)} EGP`).join('\n');
     return NextResponse.json({
-      reply: `تم استلام طلبك! 🛒\n\n${itemsList}\n\nالمجموع: ${orderData.total.toFixed(2)} EGP\n\nهل تريد تأكيد الطلب؟ (نعم/لا)`,
+      reply: `تم استلام طلبك! 🛒\n\n${itemsList}\n\nالمجموع: ${orderData.total.toFixed(2)} EGP\n\nأرسل عنوان التوصيل بالتفصيل أولاً، ثم نختار طريقة الدفع ونؤكد الطلب.`,
       intent: 'order', orderData,
     });
   }

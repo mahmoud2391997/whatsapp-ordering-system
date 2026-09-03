@@ -6,17 +6,20 @@ export const dynamic = 'force-dynamic';
 
 interface ConfirmOrderBody {
   orderId: string;
-  message: string;
+  message?: string;
 }
 
 export async function POST(req: Request) {
   const body: ConfirmOrderBody = await req.json().catch(() => null);
-  if (!body || !body.orderId || !body.message) {
-    return NextResponse.json({ error: 'orderId and message are required' }, { status: 400 });
+  if (!body || !body.orderId) {
+    return NextResponse.json({ error: 'orderId is required' }, { status: 400 });
   }
 
   const order = await prisma.order.findUnique({ where: { id: body.orderId }, include: { orderItems: true } });
   if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+  if (order.status !== 'pending') {
+    return NextResponse.json({ error: `Only pending orders can be confirmed (current status: ${order.status})` }, { status: 409 });
+  }
 
   await prisma.order.update({ where: { id: body.orderId }, data: { status: 'confirmed' } });
 
@@ -31,7 +34,8 @@ export async function POST(req: Request) {
       const formattedPhone = conversation.phone.replace(/[^0-9]/g, '');
       const orderDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
-      await fetch(`https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`, {
+      try {
+        await fetch(`https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${WHATSAPP_TOKEN}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -48,14 +52,15 @@ export async function POST(req: Request) {
             ] }],
           },
         }),
-      });
+        });
+      } catch { /* delivery failure must not undo the database status change */ }
     }
 
     const conv = await prisma.conversation.findFirst({ where: { phone: conversation.phone } });
     if (conv) {
       const time = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
       await prisma.message.create({
-        data: { conversationId: conv.id, sender: 'bot', text: `Order confirmed! Order ID: ${body.orderId}`, time, type: 'confirmation' },
+        data: { conversationId: conv.id, sender: 'bot', text: body.message?.trim() || `Order confirmed! Order ID: ${body.orderId}`, time, type: 'confirmation' },
       });
     }
   }

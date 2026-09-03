@@ -22,6 +22,7 @@ interface CheckoutBody {
   customerType?: string;
   location?: string;
   paymentMethod?: string;
+  customerConfirmed?: boolean;
 }
 
 export async function POST(req: Request) {
@@ -29,6 +30,15 @@ export async function POST(req: Request) {
 
   if (!body || !body.items?.length) {
     return NextResponse.json({ error: 'items are required' }, { status: 400 });
+  }
+  if (!body.customerName?.trim() || !body.phone?.trim()) {
+    return NextResponse.json({ error: 'customerName and phone are required' }, { status: 400 });
+  }
+  if (!body.location?.trim()) {
+    return NextResponse.json({ error: 'Delivery address is required before placing the order' }, { status: 400 });
+  }
+  if (!body.customerConfirmed) {
+    return NextResponse.json({ error: 'Please confirm that all order details are correct' }, { status: 400 });
   }
 
   const dbActive = await isDbActive();
@@ -39,11 +49,13 @@ export async function POST(req: Request) {
     return simulateCheckout(body);
   }
 
+  let menuPageId: string | null = null;
   if (body.customerId) {
     const menuPage = await prisma.menuPage.findUnique({ where: { id: body.customerId } });
     if (!menuPage) {
       return NextResponse.json({ error: 'Menu page not found for this customer ID' }, { status: 404 });
     }
+    menuPageId = menuPage.id;
   }
 
   const orderId = `ORD-${Date.now().toString().slice(-6)}`;
@@ -64,6 +76,7 @@ export async function POST(req: Request) {
       status: 'pending',
       paymentStatus,
       location: body.location ?? null,
+      menuPageId,
     },
   });
 
@@ -121,7 +134,8 @@ export async function POST(req: Request) {
     (body.location ? `Location: ${body.location}\n` : '') +
     `Payment: ${paymentLabel}\n\n` +
     `*Items:*\n${itemsText}\n\n` +
-    `*Total: ${body.total.toFixed(2)} EGP*`;
+    `*Total: ${body.total.toFixed(2)} EGP*\n\n` +
+    `Customer confirmed all order details ✅`;
 
   await prisma.message.create({
     data: { conversationId, sender: 'bot', text: orderMessage, time: now, type: 'order' },
@@ -195,7 +209,8 @@ function simulateCheckout(body: CheckoutBody) {
     (body.location ? `Location: ${body.location}\n` : '') +
     `Payment: ${paymentLabel}\n\n` +
     `*Items:*\n${itemsText}\n\n` +
-    `*Total: ${body.total.toFixed(2)} EGP*`;
+    `*Total: ${body.total.toFixed(2)} EGP*\n\n` +
+    `Customer confirmed all order details ✅`;
 
   return NextResponse.json({
     success: true,

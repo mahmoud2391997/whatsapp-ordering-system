@@ -27,7 +27,7 @@ export async function fuzzyMatchProducts(query: string, threshold = 0.1, limit =
     FROM products
     WHERE
       similarity(name, ${query}) > ${threshold}
-      OR similarity(name_ar, ${query}) > ${query}
+      OR similarity(name_ar, ${query}) > ${threshold}
     ORDER BY similarity DESC
     LIMIT ${limit}
   `;

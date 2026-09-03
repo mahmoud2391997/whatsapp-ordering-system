@@ -29,6 +29,7 @@ echo "🔧 Generating Prisma client..."
 npx prisma generate
 
 # 4. Run database migrations (pg_trgm + any new migrations)
+# The base schema is initialized once during VPS provisioning with `prisma db push`.
 echo "🗄️  Running database migrations..."
 npx prisma migrate deploy
 

@@ -40,14 +40,14 @@ export function mapOrderItem(i: {
 export function mapOrder(o: {
   id: string; customerId: string | null; customerName: string; customerType: string;
   total: unknown; status: string; paymentStatus: string; location: string | null;
-  createdAt: Date;
+  createdAt: Date; menuPageId?: string | null;
 }): Order {
   return {
     id: o.id, customer_id: o.customerId, customer_name: o.customerName,
     customer_type: o.customerType as Order['customer_type'],
     total: Number(o.total), status: o.status as Order['status'],
     payment_status: o.paymentStatus as Order['payment_status'],
-    location: o.location, created_at: o.createdAt.toISOString(),
+    location: o.location, menu_page_id: o.menuPageId, created_at: o.createdAt.toISOString(),
   };
 }
 

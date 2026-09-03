@@ -45,6 +45,7 @@ export interface Order {
   status: OrderStatus;
   payment_status: PaymentStatus;
   location: string | null;
+  menu_page_id?: string | null;
   created_at: string;
   order_items?: OrderItem[];
 }
