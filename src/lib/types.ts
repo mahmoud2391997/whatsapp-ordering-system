@@ -1,6 +1,32 @@
 export type CustomerType = 'retail' | 'shop' | 'restaurant';
-export type OrderStatus = 'pending' | 'confirmed' | 'delivering' | 'delivered' | 'completed' | 'cancelled';
-export type PaymentStatus = 'unpaid' | 'paid' | 'cod' | 'geidea_pending' | 'tamara_pending';
+export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled';
+export type PaymentStatus = 'unpaid' | 'cod' | 'pending' | 'paid' | 'failed' | 'refunded';
+
+export const ORDER_STATUS_LABELS: Record<OrderStatus, { en: string; ar: string }> = {
+  pending: { en: 'Pending confirmation', ar: 'بانتظار التأكيد' },
+  confirmed: { en: 'Confirmed', ar: 'تم التأكيد' },
+  preparing: { en: 'Being prepared', ar: 'قيد التجهيز' },
+  ready: { en: 'Ready for delivery', ar: 'جاهز للتوصيل' },
+  out_for_delivery: { en: 'Out for delivery', ar: 'خرج للتوصيل' },
+  delivered: { en: 'Delivered', ar: 'تم التوصيل' },
+  completed: { en: 'Completed', ar: 'مكتمل' },
+  cancelled: { en: 'Cancelled', ar: 'ملغي' },
+};
+
+export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  pending: ['confirmed', 'cancelled'],
+  confirmed: ['preparing', 'cancelled'],
+  preparing: ['ready', 'cancelled'],
+  ready: ['out_for_delivery', 'cancelled'],
+  out_for_delivery: ['delivered'],
+  delivered: ['completed'],
+  completed: [],
+  cancelled: [],
+};
+
+export function isOrderStatus(value: unknown): value is OrderStatus {
+  return typeof value === 'string' && value in ORDER_STATUS_LABELS;
+}
 export type PaymentMethod = 'cod' | 'online' | 'geidea' | 'tamara';
 
 export interface Product {

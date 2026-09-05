@@ -43,7 +43,9 @@ type DashSection = 'overview' | 'orders' | 'conversations' | 'customers' | 'inve
 const statusConfig: Record<OrderStatus, { label: string; color: string; icon: typeof Clock }> = {
   pending:    { label: 'Pending',    color: 'bg-amber-100 text-amber-700',   icon: Clock },
   confirmed:  { label: 'Confirmed',  color: 'bg-blue-100 text-blue-700',     icon: CheckCircle2 },
-  delivering: { label: 'Delivering', color: 'bg-purple-100 text-purple-700', icon: Truck },
+  preparing:  { label: 'Preparing',  color: 'bg-indigo-100 text-indigo-700', icon: Package },
+  ready:      { label: 'Ready',      color: 'bg-cyan-100 text-cyan-700',     icon: CheckCircle2 },
+  out_for_delivery: { label: 'Out for delivery', color: 'bg-purple-100 text-purple-700', icon: Truck },
   delivered:  { label: 'Delivered',  color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle2 },
   completed:  { label: 'Completed',  color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle2 },
   cancelled:  { label: 'Cancelled',  color: 'bg-red-100 text-red-700',       icon: XCircle },
@@ -365,7 +367,7 @@ function OrdersSection({ orders }: { orders: Order[] }) {
     <div className="space-y-5">
       <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
       <div className="flex flex-wrap gap-2">
-        {(['all', 'pending', 'confirmed', 'delivering', 'delivered', 'completed', 'cancelled'] as const).map(f => (
+        {(['all', 'pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery', 'delivered', 'completed', 'cancelled'] as const).map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -423,8 +425,7 @@ function OrdersSection({ orders }: { orders: Order[] }) {
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         order.payment_status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
                         order.payment_status === 'cod' ? 'bg-blue-100 text-blue-700' :
-                        order.payment_status === 'geidea_pending' ? 'bg-violet-100 text-violet-700' :
-                        order.payment_status === 'tamara_pending' ? 'bg-purple-100 text-purple-700' :
+                        order.payment_status === 'pending' ? 'bg-violet-100 text-violet-700' :
                         'bg-red-100 text-red-700'
                       }`}>{order.payment_status.replace('_', ' ').toUpperCase()}</span>
                     </td>
@@ -438,7 +439,7 @@ function OrdersSection({ orders }: { orders: Order[] }) {
                           Confirm
                         </button>
                       )}
-                      {['pending', 'confirmed', 'delivering'].includes(order.status) && (
+                      {['pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery'].includes(order.status) && (
                         <button
                           onClick={() => { setCancellingId(order.id); setCancelReason(''); setOrderError(null); }}
                           className="ml-2 text-xs px-3 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition-colors font-medium"
