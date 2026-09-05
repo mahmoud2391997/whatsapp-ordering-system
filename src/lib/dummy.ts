@@ -69,7 +69,7 @@ export const DUMMY_ORDERS: Order[] = [
   },
   {
     id: 'ORD-852031', customer_id: 'demo-cust-3', customer_name: 'Green Mart', customer_type: 'shop',
-    total: 940, status: 'delivering', payment_status: 'paid', location: 'Dokki, Giza',
+    total: 940, status: 'out_for_delivery', payment_status: 'paid', location: 'Dokki, Giza',
     created_at: d(1, 16, 42),
     order_items: [
       { id: 'demo-oi-8', order_id: 'ORD-852031', product_id: 'demo-apple',   product_name: 'Apple',  qty: 20, unit: 'kg', unit_price: 30 },

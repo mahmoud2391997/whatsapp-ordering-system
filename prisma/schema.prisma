@@ -50,23 +50,49 @@ model Order {
   id             String    @id // text, e.g. "ORD-001"
   customerId     String?   @map("customer_id") @db.Uuid
   customerName   String    @map("customer_name")
+  customerPhone  String    @map("customer_phone")
   customerType   String    @default("retail") @map("customer_type")
   total          Decimal   @default(0) @db.Decimal(10, 2)
-  status         String    @default("pending")
-  paymentStatus  String    @default("unpaid") @map("payment_status")
+  status         String    @default("pending") // pending, confirmed, preparing, ready, out_for_delivery, delivered, completed, cancelled
+  paymentStatus  String    @default("unpaid") @map("payment_status") // unpaid, cod, pending, paid, failed, refunded
+  paymentMethod  String?   @map("payment_method") // cod, online, geidea, tamara
   location       String?
+  notes          String?
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
   menuPageId     String?   @map("menu_page_id") @db.Uuid
+  idempotencyKey String?   @unique @map("idempotency_key")
 
-  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  menuPage   MenuPage? @relation(fields: [menuPageId], references: [id], onDelete: SetNull)
-  orderItems OrderItem[]
+  customer    Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  menuPage    MenuPage?      @relation(fields: [menuPageId], references: [id], onDelete: SetNull)
+  orderItems  OrderItem[]
   transactions Transaction[]
+  statusHistory OrderStatusHistory[]
 
   @@index([status])
   @@index([customerId])
   @@index([menuPageId])
+  @@index([createdAt(sort: Desc)])
+  @@index([customerPhone])
   @@map("orders")
+}
+
+// ─── Order Status History ────────────────────────────────────────────
+
+model OrderStatusHistory {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId   String   @map("order_id")
+  oldStatus String   @map("old_status")
+  newStatus String   @map("new_status")
+  reason    String?
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([createdAt(sort: Desc)])
+  @@map("order_status_history")
 }
 
 // ─── Order Items ────────────────────────────────────────────────────

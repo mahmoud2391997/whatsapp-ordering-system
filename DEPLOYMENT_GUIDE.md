@@ -35,7 +35,20 @@ npx prisma db push
 
 Future deployments use `npx prisma migrate deploy` through `deploy.sh`.
 
-## Step 2: Supabase Migrations (Only If Using Supabase)
+## Step 2: Prisma migrations on the VPS
+
+This production path uses PostgreSQL on the Hostinger VPS. After setting `DATABASE_URL` and `DIRECT_DATABASE_URL`, run:
+
+```bash
+npm ci
+npx prisma generate
+npx prisma migrate deploy
+npm run build
+```
+
+The webhook URL is `https://yourdomain.com/api/webhooks/whatsapp`. Configure the WhatsApp verify token and app secret in `.env`; do not expose them in the browser.
+
+## Step 3: Supabase Migrations (Only If Using Supabase)
 
 The project includes three migrations that create the complete database schema:
 
@@ -124,6 +137,9 @@ Ensure these environment variables are set in your Vercel project:
 - `SUPABASE_JWT_SECRET` — JWT secret for auth
 - `WHATSAPP_PHONE_NUMBER_ID` — Your WhatsApp phone number ID (1146219945250452)
 - `WHATSAPP_ACCESS_TOKEN` — Your WhatsApp Business API token
+- `WHATSAPP_VERIFY_TOKEN` — Random webhook verification secret
+- `WHATSAPP_APP_SECRET` — Meta app secret used to verify webhook signatures
+- `DATABASE_URL` and `DIRECT_DATABASE_URL` — Local VPS PostgreSQL connection strings
 
 ### Set in Vercel Dashboard:
 1. Go to your Vercel project → **Settings** → **Environment Variables**

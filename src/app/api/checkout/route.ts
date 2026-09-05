@@ -61,8 +61,8 @@ export async function POST(req: Request) {
   const orderId = `ORD-${Date.now().toString().slice(-6)}`;
   let paymentStatus: string;
   switch (body.paymentMethod) {
-    case 'geidea': paymentStatus = 'geidea_pending'; break;
-    case 'tamara': paymentStatus = 'tamara_pending'; break;
+    case 'geidea': paymentStatus = 'pending'; break;
+    case 'tamara': paymentStatus = 'pending'; break;
     case 'online': paymentStatus = 'unpaid'; break;
     default: paymentStatus = 'cod';
   }
@@ -71,7 +71,9 @@ export async function POST(req: Request) {
     data: {
       id: orderId,
       customerName: body.customerName,
+      customerPhone: body.phone.replace(/[^0-9]/g, ''),
       customerType: body.customerType ?? 'retail',
+      paymentMethod: body.paymentMethod ?? 'cod',
       total: body.total,
       status: 'pending',
       paymentStatus,
