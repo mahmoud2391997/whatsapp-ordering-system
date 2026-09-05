@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_TRANSITIONS, OrderStatus, isOrderStatus } from '@/lib/types';
+import { sendWhatsApp } from '@/lib/whatsapp';
 
 export const ORDER_STATUSES = Object.keys(ORDER_STATUS_LABELS) as OrderStatus[];
 
@@ -32,6 +33,12 @@ export async function transitionOrder(orderId: string, nextStatus: OrderStatus, 
     if (!canTransition(current.status, nextStatus)) throw new Error('INVALID_STATUS_TRANSITION');
     const updated = await tx.order.update({ where: { id: orderId }, data: { status: nextStatus } });
     await tx.orderStatusHistory.create({ data: { orderId, oldStatus: current.status, newStatus: nextStatus, reason } });
+    return updated;
+  }).then(async (updated) => {
+    if (updated.customerPhone) {
+      const label = ORDER_STATUS_LABELS[nextStatus];
+      await sendWhatsApp(updated.customerPhone, `Order ${updated.id} update:\n${label.en}\n${label.ar}`);
+    }
     return updated;
   });
 }
