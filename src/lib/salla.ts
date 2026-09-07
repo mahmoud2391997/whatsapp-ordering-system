@@ -5,8 +5,8 @@ import { prisma } from '@/lib/db';
 const API_URL = process.env.SALLA_API_URL ?? 'https://api.salla.dev';
 const TOKEN_URL = process.env.SALLA_TOKEN_URL ?? 'https://accounts.salla.sa/oauth2/token';
 const encryptionKey = () => {
-  const value = process.env.SALLA_TOKEN_ENCRYPTION_KEY;
-  if (!value) throw new Error('SALLA_TOKEN_ENCRYPTION_KEY is not configured');
+  const value = process.env.SALLA_TOKEN_ENCRYPTION_KEY ?? process.env.TOKEN_ENCRYPTION_KEY;
+  if (!value) throw new Error('SALLA_TOKEN_ENCRYPTION_KEY or TOKEN_ENCRYPTION_KEY is not configured');
   return crypto.createHash('sha256').update(value).digest();
 };
 

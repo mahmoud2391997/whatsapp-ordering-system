@@ -30,7 +30,7 @@ export async function GET() {
     env[key] = process.env[key] ?? process.env[`NEXT_PUBLIC_${key}`];
   }
 
-  const appUrl = process.env.APP_URL ?? 'https://yourdomain.com';
+  const appUrl = process.env.APP_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
 
   const dbActive = await isDbActive();
   const { whatsappEvents, hyperpayEvents, geideaEvents, tamaraEvents, recentLogs, txnCount } = await getIntegrationsData();
@@ -83,7 +83,7 @@ export async function GET() {
       name: 'Salla Partner App', service: 'salla',
       configured: sallaConfigured, status: sallaAuth ? (sallaAuth.lastSyncError ? 'degraded' : 'operational') : 'pending',
       description: 'Multi-store catalog, customer, order, and webhook synchronization',
-      webhookUrl: `${appUrl}/api/webhooks/salla`,
+      webhookUrl: appUrl ? `${appUrl}/api/webhooks/salla` : undefined,
       lastEvent: sallaAuth?.lastWebhookAt?.toISOString() ?? null,
     },
     {
