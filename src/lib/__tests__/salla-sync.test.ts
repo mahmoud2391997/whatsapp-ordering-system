@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   product: { findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), update: vi.fn(), findMany: vi.fn() },
   customer: { findUnique: vi.fn(), upsert: vi.fn() },
   order: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
-  sallaAuthorization: { findFirst: vi.fn() },
+  sallaAuthorization: { findFirst: vi.fn(), update: vi.fn() },
   getSallaAuthorization: vi.fn(),
   sallaFetch: vi.fn(),
 }));
@@ -15,7 +15,7 @@ vi.mock('@/lib/salla', async (importOriginal) => {
   return { ...actual, getSallaAuthorization: mocks.getSallaAuthorization, sallaFetch: mocks.sallaFetch };
 });
 
-import { syncSallaProduct, syncSallaCustomer, syncSallaOrder, pushOrderToSalla, pushOrderStatusToSalla } from '@/lib/salla-sync';
+import { syncSallaProduct, syncSallaCustomer, syncSallaOrder, pushOrderToSalla, pushOrderStatusToSalla, sallaProductPayload, pushCatalogToSalla } from '@/lib/salla-sync';
 
 const auth = { id: 'auth-1', merchantId: 'm1', accessToken: 'enc', refreshToken: null, status: 'active' } as any;
 
@@ -122,5 +122,46 @@ describe('pushOrderStatusToSalla', () => {
     mocks.sallaFetch.mockResolvedValue({ data: { id: '555' } });
     await pushOrderStatusToSalla('ORD-1', 'confirmed');
     expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/orders/555/status', expect.objectContaining({ method: 'POST' }), auth);
+  });
+});
+
+describe('sallaProductPayload', () => {
+  it('builds a sale product with arabic name, quantity and image', () => {
+    const payload = sallaProductPayload({ name: 'Tomato', nameAr: 'طماطم', retailPrice: 5, stock: 20, imageUrl: 'https://x/t.png' });
+    expect(payload).toEqual({
+      name: 'طماطم',
+      price: 5,
+      product_type: 'product',
+      quantity: 20,
+      status: 'sale',
+      require_shipping: true,
+      images: [{ original: 'https://x/t.png', default: true }],
+    });
+  });
+
+  it('marks out-of-stock products as out and omits missing images', () => {
+    const payload = sallaProductPayload({ name: 'Basil', retailPrice: 1.5, stock: 0, imageUrl: null });
+    expect(payload.status).toBe('out');
+    expect(payload.images).toBeUndefined();
+  });
+});
+
+describe('pushCatalogToSalla', () => {
+  it('creates remote products and links ids back', async () => {
+    mocks.product.findMany.mockResolvedValue([{ id: 'p1', name: 'Tomato', nameAr: 'طماطم', retailPrice: 5, stock: 10, imageUrl: 'https://x/t.png', sallaProductId: null }]);
+    mocks.sallaFetch.mockResolvedValue({ data: { id: 70001 } });
+    mocks.product.update.mockResolvedValue({});
+    const result = await pushCatalogToSalla();
+    expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/products', expect.objectContaining({ method: 'POST' }), auth);
+    expect(mocks.product.update).toHaveBeenCalledWith(expect.objectContaining({ data: { sallaProductId: '70001', syncedAt: expect.any(Date) } }));
+    expect(result).toEqual({ ok: true, pushed: 1, created: 1, updated: 0, errors: [] });
+  });
+
+  it('updates already-linked products via PUT', async () => {
+    mocks.product.findMany.mockResolvedValue([{ id: 'p2', name: 'Apple', nameAr: 'تفاح', retailPrice: 4, stock: 50, imageUrl: null, sallaProductId: '900' }]);
+    mocks.sallaFetch.mockResolvedValue({ data: { id: 900 } });
+    const result = await pushCatalogToSalla();
+    expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/products/900', expect.objectContaining({ method: 'PUT' }), auth);
+    expect(result).toEqual({ ok: true, pushed: 1, created: 0, updated: 1, errors: [] });
   });
 });

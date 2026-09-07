@@ -850,7 +850,7 @@ function IntegrationsSection() {
       const endpoint = action === 'retry' ? '/api/salla/retry' : `/api/salla/sync/${action}`;
       const response = await fetch(endpoint, { method: 'POST' });
       const result = await response.json();
-      setSyncResult(response.ok ? `${action} complete${result.succeeded !== undefined ? `: ${result.succeeded} succeeded, ${result.stillFailing} still failing` : ''}` : result.error ?? 'Sync failed');
+      setSyncResult(response.ok ? `${action} complete${result.succeeded !== undefined ? `: ${result.succeeded} succeeded, ${result.stillFailing} still failing` : result.pushed !== undefined ? `: ${result.pushed} pushed (${result.created} created, ${result.updated} updated)${result.errors?.length ? `, ${result.errors.length} failed` : ''}` : ''}` : result.error ?? 'Sync failed');
     } catch { setSyncResult('Sync failed'); } finally { setSyncing(null); }
   };
 
@@ -962,7 +962,7 @@ function IntegrationsSection() {
             <a href="/api/salla/install" className="text-sm font-medium text-emerald-700 hover:underline">{salla?.configured ? 'Reconnect' : 'Connect to Salla'}</a>
           </div>
           <div className="flex flex-wrap gap-2 mt-4">
-            {['products', 'customers', 'orders', 'retry'].map((action) => <button key={action} onClick={() => runSallaAction(action)} disabled={syncing !== null} className="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 disabled:opacity-50">{syncing === action ? 'Working...' : action === 'retry' ? 'Retry failed syncs' : `Sync ${action}`}</button>)}
+            {['products', 'customers', 'orders', 'retry', 'push'].map((action) => <button key={action} onClick={() => runSallaAction(action)} disabled={syncing !== null} className="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 disabled:opacity-50">{syncing === action ? 'Working...' : action === 'retry' ? 'Retry failed syncs' : action === 'push' ? 'Push catalog' : `Sync ${action}`}</button>)}
           </div>
           {syncResult && <p className="text-xs text-gray-600 mt-3" role="status">{syncResult}</p>}
         </div>;

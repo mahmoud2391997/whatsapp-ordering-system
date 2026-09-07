@@ -133,6 +133,46 @@ export async function syncSallaOrder(payload: any) {
   return existing ? prisma.order.update({ where: { id: existing.id }, data }) : prisma.order.create({ data: { id: orderId, sallaOrderId, ...data } });
 }
 
+export function sallaProductPayload(product: { name: string; nameAr?: string | null; retailPrice?: number | { toString(): string } | null; stock?: number; imageUrl?: string | null }) {
+  const payload: Record<string, unknown> = {
+    name: product.nameAr || product.name,
+    price: Number(product.retailPrice) || 0,
+    product_type: 'product',
+    quantity: Number(product.stock) || 0,
+    status: Number(product.stock) > 0 ? 'sale' : 'out',
+    require_shipping: true,
+  };
+  if (product.imageUrl) payload.images = [{ original: product.imageUrl, default: true }];
+  return payload;
+}
+
+export async function pushCatalogToSalla() {
+  const auth = await getSallaAuthorization();
+  if (!auth) throw new Error('SALLA_NOT_CONNECTED');
+  const products = await prisma.product.findMany({ orderBy: { name: 'asc' } });
+  let created = 0;
+  let updated = 0;
+  const errors: Array<{ name: string; error: string }> = [];
+  for (const product of products) {
+    const payload = sallaProductPayload(product);
+    try {
+      if (product.sallaProductId) {
+        await sallaFetch(`/admin/v2/products/${product.sallaProductId}`, { method: 'PUT', body: JSON.stringify(payload) }, auth);
+        updated++;
+      } else {
+        const result = await sallaFetch<{ data?: { id?: string | number } }>('/admin/v2/products', { method: 'POST', body: JSON.stringify(payload) }, auth);
+        const remoteId = String(result?.data?.id ?? '');
+        if (remoteId) await prisma.product.update({ where: { id: product.id }, data: { sallaProductId: remoteId, syncedAt: new Date() } });
+        created++;
+      }
+    } catch (error) {
+      errors.push({ name: product.name, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  await prisma.sallaAuthorization.update({ where: { id: auth.id }, data: { lastSyncAt: new Date(), lastSyncError: errors.length ? errors[0].error : null } });
+  return { ok: true, pushed: created + updated, created, updated, errors };
+}
+
 export async function pushOrderToSalla(orderId: string) {
   const auth = await getSallaAuthorization();
   if (!auth) throw new Error('SALLA_NOT_CONNECTED');
