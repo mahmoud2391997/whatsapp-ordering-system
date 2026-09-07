@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
-import { verifySallaWebhook } from '@/lib/salla';
+import { verifySallaWebhook, encryptToken } from '@/lib/salla';
 import { applySallaWebhook } from '@/lib/salla-sync';
 
 export async function POST(request: NextRequest) {
@@ -25,7 +25,35 @@ export async function POST(request: NextRequest) {
     if (merchantId) {
       await prisma.sallaAuthorization.updateMany({ where: { merchantId }, data: { lastWebhookAt: new Date(), status: eventType.includes('uninstall') ? 'revoked' : 'active' } });
     }
-    if (!eventType.includes('authorize') && !eventType.includes('uninstall')) await applySallaWebhook(eventType, payload);
+    if (eventType.includes('authorize')) {
+      const data = payload.data as { access_token?: string; expires?: number; refresh_token?: string; scope?: string } | undefined;
+      const accessToken = data?.access_token;
+      if (merchantId && accessToken) {
+        const expires = Number(data.expires ?? 0);
+        const expiresAt = expires > 1_000_000_000 ? new Date(expires * 1000) : expires > 0 ? new Date(Date.now() + expires * 1000) : null;
+        await prisma.sallaAuthorization.upsert({
+          where: { merchantId },
+          update: {
+            accessToken: encryptToken(accessToken),
+            refreshToken: data.refresh_token ? encryptToken(data.refresh_token) : undefined,
+            expiresAt,
+            scopes: data.scope ?? null,
+            status: 'active',
+            lastSyncError: null,
+          },
+          create: {
+            merchantId,
+            accessToken: encryptToken(accessToken),
+            refreshToken: data.refresh_token ? encryptToken(data.refresh_token) : null,
+            expiresAt,
+            scopes: data.scope ?? null,
+            status: 'active',
+          },
+        });
+      }
+    } else if (!eventType.includes('uninstall')) {
+      await applySallaWebhook(eventType, payload);
+    }
     await prisma.webhookEvent.update({ where: { id: event.id }, data: { processed: true, error: null } });
     return NextResponse.json({ ok: true });
   } catch (error) {
