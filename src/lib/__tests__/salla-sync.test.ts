@@ -126,8 +126,8 @@ describe('pushOrderStatusToSalla', () => {
 });
 
 describe('sallaProductPayload', () => {
-  it('builds a sale product with arabic name, quantity and image', () => {
-    const payload = sallaProductPayload({ name: 'Tomato', nameAr: 'طماطم', retailPrice: 5, stock: 20, imageUrl: 'https://x/t.png' });
+  it('builds a sale product with arabic name and quantity', () => {
+    const payload = sallaProductPayload({ name: 'Tomato', nameAr: 'طماطم', retailPrice: 5, stock: 20 });
     expect(payload).toEqual({
       name: 'طماطم',
       price: 5,
@@ -137,25 +137,28 @@ describe('sallaProductPayload', () => {
       require_shipping: true,
       weight: 1,
       weight_type: 'kg',
-      images: [{ original: 'https://x/t.png', default: true }],
     });
   });
 
-  it('marks out-of-stock products as out and omits missing images', () => {
-    const payload = sallaProductPayload({ name: 'Basil', retailPrice: 1.5, stock: 0, imageUrl: null });
+  it('marks out-of-stock products as out', () => {
+    const payload = sallaProductPayload({ name: 'Basil', retailPrice: 1.5, stock: 0 });
     expect(payload.status).toBe('out');
-    expect(payload.images).toBeUndefined();
   });
 });
 
 describe('pushCatalogToSalla', () => {
-  it('creates remote products and links ids back', async () => {
+  beforeEach(() => {
+    global.fetch = vi.fn(async () => new Response(new ArrayBuffer(8), { status: 200, headers: { 'content-type': 'image/jpeg' } }));
+  });
+
+  it('creates remote products, links ids back and uploads image via multipart', async () => {
     mocks.product.findMany.mockResolvedValue([{ id: 'p1', name: 'Tomato', nameAr: 'طماطم', retailPrice: 5, stock: 10, imageUrl: 'https://x/t.png', sallaProductId: null }]);
     mocks.sallaFetch.mockResolvedValue({ data: { id: 70001 } });
     mocks.product.update.mockResolvedValue({});
     const result = await pushCatalogToSalla();
     expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/products', expect.objectContaining({ method: 'POST' }), auth);
     expect(mocks.product.update).toHaveBeenCalledWith(expect.objectContaining({ data: { sallaProductId: '70001', syncedAt: expect.any(Date) } }));
+    expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/products/70001/images', expect.objectContaining({ method: 'POST' }), auth);
     expect(result).toEqual({ ok: true, pushed: 1, created: 1, updated: 0, errors: [] });
   });
 

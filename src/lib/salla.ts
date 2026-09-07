@@ -133,7 +133,10 @@ export async function sallaFetch<T>(path: string, init: RequestInit = {}, auth?:
   const authorization = auth ?? await getSallaAuthorization();
   if (!authorization) throw new Error('SALLA_NOT_CONNECTED');
   const token = await getSallaAccessToken(authorization);
-  const response = await fetchWithRetry(sallaApiUrl(path), { ...init, headers: { accept: 'application/json', ...(init.body ? { 'content-type': 'application/json' } : {}), ...init.headers, authorization: `Bearer ${token}` }, cache: 'no-store' });
+  const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
+  const headers: Record<string, string> = { accept: 'application/json', ...(init.headers as Record<string, string>) };
+  if (init.body && !isFormData && !headers['content-type']) headers['content-type'] = 'application/json';
+  const response = await fetchWithRetry(sallaApiUrl(path), { ...init, headers: { ...headers, authorization: `Bearer ${token}` }, cache: 'no-store' });
   if (!response.ok) throw new Error(`Salla API ${response.status}: ${await responseError(response)}`);
   return response.json() as Promise<T>;
 }

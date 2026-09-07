@@ -133,8 +133,8 @@ export async function syncSallaOrder(payload: any) {
   return existing ? prisma.order.update({ where: { id: existing.id }, data }) : prisma.order.create({ data: { id: orderId, sallaOrderId, ...data } });
 }
 
-export function sallaProductPayload(product: { name: string; nameAr?: string | null; retailPrice?: number | { toString(): string } | null; stock?: number; imageUrl?: string | null }) {
-  const payload: Record<string, unknown> = {
+export function sallaProductPayload(product: { name: string; nameAr?: string | null; retailPrice?: number | { toString(): string } | null; stock?: number }) {
+  return {
     name: product.nameAr || product.name,
     price: Number(product.retailPrice) || 0,
     product_type: 'product',
@@ -143,9 +143,18 @@ export function sallaProductPayload(product: { name: string; nameAr?: string | n
     require_shipping: true,
     weight: 1,
     weight_type: 'kg',
-  };
-  if (product.imageUrl) payload.images = [{ original: product.imageUrl, default: true }];
-  return payload;
+  } as const;
+}
+
+async function attachProductImage(remoteId: string, imageUrl: string, auth?: NonNullable<Awaited<ReturnType<typeof getSallaAuthorization>>>) {
+  const response = await fetch(imageUrl, { cache: 'no-store' });
+  if (!response.ok || !response.body) throw new Error(`image download failed (${response.status})`);
+  const bytes = await response.arrayBuffer();
+  const extension = response.headers.get('content-type')?.includes('png') ? 'png' : 'jpg';
+  const form = new FormData();
+  form.append('photo', new Blob([bytes]), `image.${extension}`);
+  form.append('main', 'true');
+  await sallaFetch(`/admin/v2/products/${remoteId}/images`, { method: 'POST', body: form }, auth);
 }
 
 export async function pushCatalogToSalla() {
@@ -158,14 +167,22 @@ export async function pushCatalogToSalla() {
   for (const product of products) {
     const payload = sallaProductPayload(product);
     try {
-      if (product.sallaProductId) {
-        await sallaFetch(`/admin/v2/products/${product.sallaProductId}`, { method: 'PUT', body: JSON.stringify(payload) }, auth);
+      let remoteId = product.sallaProductId;
+      if (remoteId) {
+        await sallaFetch(`/admin/v2/products/${remoteId}`, { method: 'PUT', body: JSON.stringify(payload) }, auth);
         updated++;
       } else {
         const result = await sallaFetch<{ data?: { id?: string | number } }>('/admin/v2/products', { method: 'POST', body: JSON.stringify(payload) }, auth);
-        const remoteId = String(result?.data?.id ?? '');
+        remoteId = String(result?.data?.id ?? '');
         if (remoteId) await prisma.product.update({ where: { id: product.id }, data: { sallaProductId: remoteId, syncedAt: new Date() } });
         created++;
+      }
+      if (remoteId && product.imageUrl) {
+        try {
+          await attachProductImage(remoteId, product.imageUrl, auth);
+        } catch (error) {
+          errors.push({ name: product.name, error: `image: ${error instanceof Error ? error.message : String(error)}` });
+        }
       }
     } catch (error) {
       errors.push({ name: product.name, error: error instanceof Error ? error.message : String(error) });
