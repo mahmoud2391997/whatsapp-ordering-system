@@ -7,6 +7,48 @@ function dataOf(payload: any): SallaRecord {
   return (payload?.data ?? payload) as SallaRecord;
 }
 
+export function sallaAmount(value: unknown): number {
+  if (value == null) return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'string') {
+    const n = Number(value.replace(/[,\s]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (typeof value === 'object') return sallaAmount((value as Record<string, unknown>)?.amount);
+  return 0;
+}
+
+export function sallaStatusSlug(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const o = value as Record<string, unknown>;
+    return String(o.slug ?? o.name ?? o.value ?? 'pending').toLowerCase();
+  }
+  return 'pending';
+}
+
+const STATUS_ALIAS: Record<string, string> = {
+  new: 'pending',
+  created: 'pending',
+  payment_pending: 'pending',
+  payment_failed: 'pending',
+  under_review: 'confirmed',
+  in_progress: 'preparing',
+  working: 'preparing',
+  ready: 'ready',
+  delivering: 'out_for_delivery',
+  shipped: 'out_for_delivery',
+  delivered: 'delivered',
+  completed: 'completed',
+  canceled: 'cancelled',
+  cancelled: 'cancelled',
+  other: 'pending',
+};
+
+export function toLocalStatus(slug: string): string {
+  return STATUS_ALIAS[slug] ?? slug;
+}
+
 export async function syncSallaProduct(payload: any, auth = undefined) {
   const item = dataOf(payload);
   const id = String(item.id ?? item.product_id ?? '');
@@ -37,8 +79,8 @@ export async function syncSallaOrder(payload: any) {
   if (!sallaOrderId) throw new Error('Salla order id is missing');
   const phone = String(item.customer?.mobile ?? item.customer?.phone ?? item.phone ?? 'unknown');
   const orderId = `SALLA-${sallaOrderId}`;
-  const status = String(item.status?.slug ?? item.status ?? 'pending');
-  const total = Number(item.amounts?.total?.amount ?? item.total ?? 0);
+  const status = toLocalStatus(sallaStatusSlug(item.status));
+  const total = sallaAmount(item.amounts?.total ?? item.total ?? 0);
   const existing = await prisma.order.findUnique({ where: { sallaOrderId } });
   const data = { customerName: String(item.customer?.name ?? item.customer_name ?? 'Salla customer'), customerPhone: phone, total, status, paymentStatus: String(item.payment?.status ?? 'unpaid'), location: item.shipping?.address?.street ? String(item.shipping.address.street) : null, sallaSyncStatus: 'synced', sallaSyncError: null, sallaSyncedAt: new Date() };
   return existing ? prisma.order.update({ where: { id: existing.id }, data }) : prisma.order.create({ data: { id: orderId, sallaOrderId, ...data } });

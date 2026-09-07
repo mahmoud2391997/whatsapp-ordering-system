@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSallaAuthorization, sallaFetch } from '@/lib/salla';
+import { sallaAmount, sallaStatusSlug, toLocalStatus } from '@/lib/salla-sync';
 
 export async function POST() {
   const auth = await getSallaAuthorization();
@@ -14,9 +15,10 @@ export async function POST() {
       const customer = item.customer as Record<string, unknown> | undefined;
       const customerName = String(customer?.name ?? item.customer_name ?? 'Salla customer');
       const customerPhone = String(customer?.mobile ?? customer?.phone ?? item.customer_phone ?? `salla-${sallaOrderId}`);
-      const total = Number((item.total as Record<string, unknown> | undefined)?.amount ?? item.total ?? 0);
+      const total = sallaAmount((item.total as Record<string, unknown>) ?? item.total);
+      const status = toLocalStatus(sallaStatusSlug(item.status));
       const existing = await prisma.order.findUnique({ where: { sallaOrderId } });
-      await prisma.order.upsert({ where: { sallaOrderId }, update: { customerName, customerPhone, total, status: String(item.status?.toString().toLowerCase() ?? 'pending'), sallaSyncStatus: 'synced', sallaSyncError: null, sallaSyncedAt: new Date() }, create: { id: `SALLA-${sallaOrderId}`, sallaOrderId, customerName, customerPhone, total, status: 'pending', paymentStatus: 'unpaid', sallaSyncStatus: 'synced', sallaSyncedAt: new Date() } });
+      await prisma.order.upsert({ where: { sallaOrderId }, update: { customerName, customerPhone, total, status, sallaSyncStatus: 'synced', sallaSyncError: null, sallaSyncedAt: new Date() }, create: { id: `SALLA-${sallaOrderId}`, sallaOrderId, customerName, customerPhone, total, status: 'pending', paymentStatus: 'unpaid', sallaSyncStatus: 'synced', sallaSyncedAt: new Date() } });
       if (!existing) await prisma.orderStatusHistory.create({ data: { orderId: `SALLA-${sallaOrderId}`, oldStatus: 'new', newStatus: 'pending', reason: 'Imported from Salla' } });
       synced++;
     }
