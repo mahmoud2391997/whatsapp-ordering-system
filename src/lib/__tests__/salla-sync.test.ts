@@ -15,7 +15,7 @@ vi.mock('@/lib/salla', async (importOriginal) => {
   return { ...actual, getSallaAuthorization: mocks.getSallaAuthorization, sallaFetch: mocks.sallaFetch };
 });
 
-import { syncSallaProduct, syncSallaCustomer, syncSallaOrder, pushOrderToSalla, pushOrderStatusToSalla, sallaProductPayload, pushCatalogToSalla } from '@/lib/salla-sync';
+import { syncSallaProduct, syncSallaCustomer, syncSallaOrder, pushOrderToSalla, pushOrderStatusToSalla, sallaProductPayload, pushCatalogToSalla, fetchSallaCategories, resolveSallaCategoryId, ensureSallaCategory } from '@/lib/salla-sync';
 
 const auth = { id: 'auth-1', merchantId: 'm1', accessToken: 'enc', refreshToken: null, status: 'active' } as any;
 
@@ -144,6 +144,76 @@ describe('sallaProductPayload', () => {
     const payload = sallaProductPayload({ name: 'Basil', retailPrice: 1.5, stock: 0 });
     expect(payload.status).toBe('out');
   });
+
+  it('includes categories array with the salla category id when resolved', () => {
+    const payload = sallaProductPayload({ name: 'Tomato', nameAr: 'طماطم', retailPrice: 5, stock: 10, categoryId: '11' });
+    expect(payload.categories).toEqual([11]);
+    expect(payload.category_id).toBeUndefined();
+  });
+
+  it('omits categories when no salla category id is available', () => {
+    const payload = sallaProductPayload({ name: 'Tomato', retailPrice: 5, stock: 10 });
+    expect(payload.categories).toBeUndefined();
+  });
+});
+
+describe('fetchSallaCategories', () => {
+  it('aggregates categories across pages and stops on a short page', async () => {
+    mocks.sallaFetch.mockImplementation(async (path: string) => path.includes('page=2')
+      ? { data: [{ id: 101, name: 'cat-101' }] }
+      : { data: Array.from({ length: 100 }, (_, i) => ({ id: i + 1, name: `cat-${i + 1}` })) });
+    const categories = await fetchSallaCategories(auth);
+    expect(categories).toHaveLength(101);
+    expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/categories?page=2&per_page=100', {}, auth);
+  });
+
+  it('stops pagination after an empty page', async () => {
+    mocks.sallaFetch.mockResolvedValue({ data: [] });
+    const categories = await fetchSallaCategories(auth);
+    expect(categories).toEqual([]);
+    expect(mocks.sallaFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('resolveSallaCategoryId', () => {
+  it('maps local vegetables to the خضروات salla category', async () => {
+    const id = await resolveSallaCategoryId('vegetables', [{ id: 1, name_ar: 'فواكه' }, { id: 2, name_ar: 'خضروات' }]);
+    expect(id).toBe('2');
+  });
+
+  it('maps local fruits to الفواكه salla category', async () => {
+    const id = await resolveSallaCategoryId('fruits', [{ id: 1, name_ar: 'فواكه' }, { id: 2, name_ar: 'خضروات' }]);
+    expect(id).toBe('1');
+  });
+
+  it('returns undefined when no salla category matches', async () => {
+    mocks.sallaFetch.mockResolvedValue({ data: [{ id: 1, name: 'Dresses' }] });
+    const id = await resolveSallaCategoryId('vegetables', undefined, auth);
+    expect(id).toBeUndefined();
+  });
+
+  it('ignores categories with empty names', async () => {
+    mocks.sallaFetch.mockResolvedValue({ data: [{ id: 1 }, { id: 2, name_ar: 'أعشاب' }] });
+    const id = await resolveSallaCategoryId('herbs', undefined, auth);
+    expect(id).toBe('2');
+  });
+});
+
+describe('ensureSallaCategory', () => {
+  it('reuses an existing matching category', async () => {
+    const id = await ensureSallaCategory('vegetables', [{ id: 5, name_ar: 'خضروات' }], auth);
+    expect(id).toBe('5');
+    expect(mocks.sallaFetch).not.toHaveBeenCalledWith('/admin/v2/categories', expect.objectContaining({ method: 'POST' }), auth);
+  });
+
+  it('creates the category on salla when missing (clothes-only store)', async () => {
+    mocks.sallaFetch.mockResolvedValue({ data: { id: 555 } });
+    const categories: any[] = [{ id: 1, name: 'الفساتين' }];
+    const id = await ensureSallaCategory('vegetables', categories, auth);
+    expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/categories', expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: 'خضروات' }) }), auth);
+    expect(id).toBe('555');
+    expect(categories).toContainEqual(expect.objectContaining({ id: 555, name: 'خضروات' }));
+  });
 });
 
 describe('pushCatalogToSalla', () => {
@@ -152,22 +222,31 @@ describe('pushCatalogToSalla', () => {
   });
 
   it('creates remote products, links ids back and uploads image via multipart', async () => {
-    mocks.product.findMany.mockResolvedValue([{ id: 'p1', name: 'Tomato', nameAr: 'طماطم', retailPrice: 5, stock: 10, imageUrl: 'https://x/t.png', sallaProductId: null }]);
-    mocks.sallaFetch.mockResolvedValue({ data: { id: 70001, images: [] } });
+    mocks.product.findMany.mockResolvedValue([{ id: 'p1', name: 'Tomato', nameAr: 'طماطم', retailPrice: 5, stock: 10, imageUrl: 'https://x/t.png', sallaProductId: null, category: 'vegetables' }]);
+    mocks.sallaFetch.mockImplementation(async (path: string, init: any) => {
+      if (path.startsWith('/admin/v2/categories')) return { data: [{ id: 11, name: 'خضروات' }] };
+      if (path === '/admin/v2/products' && init?.method === 'POST') return { data: { id: 70001 } };
+      return { data: { id: 70001, images: [] } };
+    });
     mocks.product.update.mockResolvedValue({});
     const result = await pushCatalogToSalla();
     expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/products', expect.objectContaining({ method: 'POST' }), auth);
     expect(mocks.product.update).toHaveBeenCalledWith(expect.objectContaining({ data: { sallaProductId: '70001', syncedAt: expect.any(Date) } }));
     expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/products/70001', {}, auth);
     expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/products/70001/images', expect.objectContaining({ method: 'POST' }), auth);
+    expect(JSON.parse(mocks.sallaFetch.mock.calls.find(([path]) => path === '/admin/v2/products')?.[1]?.body as any).categories).toEqual([11]);
     expect(result).toEqual({ ok: true, pushed: 1, created: 1, updated: 0, errors: [] });
   });
 
   it('updates already-linked products via PUT', async () => {
-    mocks.product.findMany.mockResolvedValue([{ id: 'p2', name: 'Apple', nameAr: 'تفاح', retailPrice: 4, stock: 50, imageUrl: null, sallaProductId: '900' }]);
-    mocks.sallaFetch.mockResolvedValue({ data: { id: 900 } });
+    mocks.product.findMany.mockResolvedValue([{ id: 'p2', name: 'Apple', nameAr: 'تفاح', retailPrice: 4, stock: 50, imageUrl: null, sallaProductId: '900', category: 'fruits' }]);
+    mocks.sallaFetch.mockImplementation(async (path: string, init: any) => {
+      if (path.startsWith('/admin/v2/categories')) return { data: [{ id: 12, name_ar: 'فواكه' }, { id: 13, name_ar: 'خضروات' }] };
+      return { data: { id: 900 } };
+    });
     const result = await pushCatalogToSalla();
     expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/products/900', expect.objectContaining({ method: 'PUT' }), auth);
+    expect(JSON.parse(mocks.sallaFetch.mock.calls.find(([path, init]) => path === '/admin/v2/products/900' && init?.method === 'PUT')?.[1]?.body as any).categories).toEqual([12]);
     expect(result).toEqual({ ok: true, pushed: 1, created: 0, updated: 1, errors: [] });
   });
 });

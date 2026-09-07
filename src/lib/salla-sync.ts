@@ -1,6 +1,57 @@
 import { prisma } from '@/lib/db';
 import { getSallaAuthorization, sallaFetch } from '@/lib/salla';
 
+type SallaCategory = { id: number | string; name?: string; name_ar?: string };
+
+export async function fetchSallaCategories(auth?: NonNullable<Awaited<ReturnType<typeof getSallaAuthorization>>>): Promise<SallaCategory[]> {
+  const categories: SallaCategory[] = [];
+  let page = 1;
+  const perPage = 100;
+  const maxPages = 100;
+  while (page <= maxPages) {
+    const result = await sallaFetch<{ data?: SallaCategory[] }>(`/admin/v2/categories?page=${page}&per_page=${perPage}`, {}, auth);
+    const items = result?.data ?? [];
+    categories.push(...items);
+    if (!Array.isArray(items) || items.length < perPage) break;
+    page++;
+  }
+  return categories;
+}
+
+const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  vegetables: ['خضروات', 'خضراوات', 'خضار', 'خضاره', 'vegetables', 'vegetable', 'veg'],
+  fruits: ['فواكه', 'فاكهه', 'فاكهة', 'fruit', 'fruits'],
+  herbs: ['أعشاب', 'اعشاب', 'herb', 'herbs'],
+};
+
+const CATEGORY_NAMES: Record<string, { ar: string; en: string }> = {
+  vegetables: { ar: 'خضروات', en: 'vegetables' },
+  fruits: { ar: 'فواكه', en: 'fruits' },
+  herbs: { ar: 'أعشاب', en: 'herbs' },
+};
+
+export async function ensureSallaCategory(localCategory: string, sallaCategories: SallaCategory[], auth: NonNullable<Awaited<ReturnType<typeof getSallaAuthorization>>>): Promise<string> {
+  const resolved = await resolveSallaCategoryId(localCategory, sallaCategories, auth);
+  if (resolved) return resolved;
+  const label = CATEGORY_NAMES[localCategory.toLowerCase()] ?? { ar: localCategory, en: localCategory };
+  const result = await sallaFetch<{ data?: { id?: string | number } }>('/admin/v2/categories', { method: 'POST', body: JSON.stringify({ name: label.ar }) }, auth);
+  const id = result?.data?.id;
+  if (id == null) throw new Error(`Could not create Salla category for '${localCategory}'`);
+  sallaCategories.push({ id, name: label.ar });
+  return String(id);
+}
+
+export async function resolveSallaCategoryId(localCategory: string, sallaCategories?: SallaCategory[], auth?: NonNullable<Awaited<ReturnType<typeof getSallaAuthorization>>>): Promise<string | undefined> {
+  const categories = sallaCategories ?? await fetchSallaCategories(auth);
+  const keywords = CATEGORY_KEYWORDS[localCategory] ?? CATEGORY_KEYWORDS[localCategory.toLowerCase()] ?? [localCategory];
+  const match = categories.find((c) => {
+    const name = String(c.name_ar ?? c.name ?? '').toLowerCase();
+    if (!name) return false;
+    return keywords.some((keyword) => keyword && (name.includes(keyword) || (keyword.length > 2 && name.startsWith(keyword))));
+  });
+  return match ? String(match.id) : undefined;
+}
+
 type SallaRecord = Record<string, any>;
 
 function dataOf(payload: any): SallaRecord {
@@ -133,8 +184,8 @@ export async function syncSallaOrder(payload: any) {
   return existing ? prisma.order.update({ where: { id: existing.id }, data }) : prisma.order.create({ data: { id: orderId, sallaOrderId, ...data } });
 }
 
-export function sallaProductPayload(product: { name: string; nameAr?: string | null; retailPrice?: number | { toString(): string } | null; stock?: number }) {
-  return {
+export function sallaProductPayload(product: { name: string; nameAr?: string | null; retailPrice?: number | { toString(): string } | null; stock?: number; categoryId?: string | number }) {
+  const payload: Record<string, any> = {
     name: product.nameAr || product.name,
     price: Number(product.retailPrice) || 0,
     product_type: 'product',
@@ -143,7 +194,11 @@ export function sallaProductPayload(product: { name: string; nameAr?: string | n
     require_shipping: true,
     weight: 1,
     weight_type: 'kg',
-  } as const;
+  };
+  if (product.categoryId != null) {
+    payload.categories = [Number(product.categoryId)];
+  }
+  return payload;
 }
 
 async function attachProductImage(remoteId: string, imageUrl: string, name: string, auth?: NonNullable<Awaited<ReturnType<typeof getSallaAuthorization>>>) {
@@ -173,11 +228,23 @@ export async function pushCatalogToSalla() {
   const auth = await getSallaAuthorization();
   if (!auth) throw new Error('SALLA_NOT_CONNECTED');
   const products = await prisma.product.findMany({ orderBy: { name: 'asc' } });
+  const sallaCategories = await fetchSallaCategories(auth);
+  const categoryCache: Record<string, string> = {};
   let created = 0;
   let updated = 0;
   const errors: Array<{ name: string; error: string }> = [];
   for (const product of products) {
-    const payload = sallaProductPayload(product);
+    const localCategory = product.category || 'vegetables';
+    if (!categoryCache[localCategory]) {
+      try {
+        categoryCache[localCategory] = await ensureSallaCategory(localCategory, sallaCategories, auth);
+      } catch (error) {
+        errors.push({ name: product.name, error: `category: ${error instanceof Error ? error.message : String(error)}` });
+        categoryCache[localCategory] = '';
+        continue;
+      }
+    }
+    const payload = sallaProductPayload({ ...product, categoryId: categoryCache[localCategory] || undefined });
     try {
       let remoteId = product.sallaProductId;
       if (remoteId) {
