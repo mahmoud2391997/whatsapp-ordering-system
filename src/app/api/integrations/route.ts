@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getIntegrationsData, isDbActive } from '@/lib/data';
+import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +22,7 @@ export async function GET() {
     'HYPERPAY_URL', 'HYPERPAY_ACCESS_TOKEN', 'HYPERPAY_ENTITY_ID',
     'GEIDEA_MERCHANT_PUBLIC_KEY', 'GEIDEA_API_PASSWORD', 'GEIDEA_API_URL',
     'TAMARA_API_TOKEN', 'TAMARA_API_URL',
+    'SALLA_CLIENT_ID', 'SALLA_CLIENT_SECRET', 'SALLA_TOKEN_ENCRYPTION_KEY', 'SALLA_WEBHOOK_SECRET',
   ];
 
   const env: Record<string, string | undefined> = {};
@@ -38,6 +40,8 @@ export async function GET() {
   const hyperpayConfigured = !!(env.HYPERPAY_URL && env.HYPERPAY_ACCESS_TOKEN && env.HYPERPAY_ENTITY_ID);
   const geideaConfigured = !!(env.GEIDEA_MERCHANT_PUBLIC_KEY && env.GEIDEA_API_PASSWORD);
   const tamaraConfigured = !!env.TAMARA_API_TOKEN;
+  const sallaConfigured = !!(env.SALLA_CLIENT_ID && env.SALLA_CLIENT_SECRET && env.SALLA_TOKEN_ENCRYPTION_KEY);
+  const sallaAuth = dbActive ? await prisma.sallaAuthorization.findFirst({ where: { status: 'active' }, orderBy: { updatedAt: 'desc' } }) : null;
 
   const integrations: IntegrationStatus[] = [
     {
@@ -72,6 +76,13 @@ export async function GET() {
       description: 'Buy Now Pay Later — 3 instalments for your customers',
       webhookUrl: tamaraConfigured ? `${appUrl}/api/webhooks/tamara` : undefined,
       lastEvent: tamaraEvents[0]?.createdAt?.toISOString() ?? null, eventCount: tamaraEvents.length,
+    },
+    {
+      name: 'Salla Partner App', service: 'salla',
+      configured: sallaConfigured, status: sallaAuth ? (sallaAuth.lastSyncError ? 'degraded' : 'operational') : 'pending',
+      description: 'Multi-store catalog, customer, order, and webhook synchronization',
+      webhookUrl: `${appUrl}/api/webhooks/salla`,
+      lastEvent: sallaAuth?.lastWebhookAt?.toISOString() ?? null,
     },
     {
       name: 'PostgreSQL (Supabase-hosted)', service: 'postgresql',

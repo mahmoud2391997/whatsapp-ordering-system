@@ -8,6 +8,27 @@ datasource db {
   directUrl = env("DIRECT_DATABASE_URL")
 }
 
+// ─── Salla Connections ───────────────────────────────────────────────
+
+model SallaAuthorization {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  merchantId      String   @unique @map("merchant_id")
+  storeName       String?  @map("store_name")
+  accessToken     String   @map("access_token")
+  refreshToken    String?  @map("refresh_token")
+  expiresAt       DateTime? @map("expires_at") @db.Timestamptz
+  scopes          String?
+  status          String   @default("active")
+  lastSyncAt      DateTime? @map("last_sync_at") @db.Timestamptz
+  lastSyncError   String?  @map("last_sync_error")
+  lastWebhookAt   DateTime? @map("last_webhook_at") @db.Timestamptz
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([status])
+  @@map("salla_authorizations")
+}
+
 // ─── Products ───────────────────────────────────────────────────────
 
 model Product {
@@ -21,8 +42,10 @@ model Product {
   wholesalePrice  Decimal  @default(0) @db.Decimal(10, 2) @map("wholesale_price")
   stock           Int      @default(0)
   imageUrl        String   @map("image_url")
+  sallaProductId  String?  @unique @map("salla_product_id")
+  syncedAt        DateTime? @map("synced_at") @db.Timestamptz
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
-
+  
   orderItems OrderItem[]
 
   @@map("products")
@@ -37,8 +60,10 @@ model Customer {
   type         String   @default("retail")
   location     String?
   totalOrders  Int      @default(0) @map("total_orders")
-  joinedAt     DateTime @default(now()) @map("joined_at") @db.Date
-
+  joinedAt       DateTime @default(now()) @map("joined_at") @db.Date
+  sallaCustomerId String? @map("salla_customer_id")
+  sallaEmail     String? @map("salla_email")
+  
   orders Order[]
 
   @@map("customers")
@@ -62,7 +87,11 @@ model Order {
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
   menuPageId     String?   @map("menu_page_id") @db.Uuid
   idempotencyKey String?   @unique @map("idempotency_key")
-
+  sallaOrderId  String?   @unique @map("salla_order_id")
+  sallaSyncStatus String  @default("not_connected") @map("salla_sync_status")
+  sallaSyncError String?  @map("salla_sync_error")
+  sallaSyncedAt  DateTime? @map("salla_synced_at") @db.Timestamptz
+  
   customer    Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
   menuPage    MenuPage?      @relation(fields: [menuPageId], references: [id], onDelete: SetNull)
   orderItems  OrderItem[]
