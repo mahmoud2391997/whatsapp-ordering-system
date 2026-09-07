@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { verifySallaWebhook } from '@/lib/salla';
+import { applySallaWebhook } from '@/lib/salla-sync';
 
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
@@ -17,8 +18,11 @@ export async function POST(request: NextRequest) {
   try {
     const merchant = payload.merchant as { id?: string | number } | undefined;
     const merchantId = String(payload.merchant_id ?? merchant?.id ?? '');
-    if (merchantId) await prisma.sallaAuthorization.updateMany({ where: { merchantId }, data: { lastWebhookAt: new Date() } });
-    await prisma.webhookEvent.update({ where: { id: event.id }, data: { processed: true } });
+    if (merchantId) {
+      await prisma.sallaAuthorization.updateMany({ where: { merchantId }, data: { lastWebhookAt: new Date(), status: eventType.includes('uninstall') ? 'revoked' : 'active' } });
+    }
+    if (!eventType.includes('authorize') && !eventType.includes('uninstall')) await applySallaWebhook(eventType, payload);
+    await prisma.webhookEvent.update({ where: { id: event.id }, data: { processed: true, error: null } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     await prisma.webhookEvent.update({ where: { id: event.id }, data: { error: error instanceof Error ? error.message : 'Webhook processing failed' } });

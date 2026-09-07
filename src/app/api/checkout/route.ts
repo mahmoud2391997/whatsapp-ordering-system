@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { isDbActive } from '@/lib/data';
 import { sendWhatsApp } from '@/lib/whatsapp';
+import { pushOrderToSalla } from '@/lib/salla-sync';
 
 export const dynamic = 'force-dynamic';
 
@@ -141,6 +142,10 @@ export async function POST(req: Request) {
 
   await prisma.message.create({
     data: { conversationId, sender: 'bot', text: orderMessage, time: now, type: 'order' },
+  });
+
+  void pushOrderToSalla(orderId).catch(async (error) => {
+    await prisma.order.update({ where: { id: orderId }, data: { sallaSyncStatus: 'failed', sallaSyncError: error instanceof Error ? error.message : 'Salla push failed' } }).catch(() => undefined);
   });
 
   let whatsappSent = false;
