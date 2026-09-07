@@ -40,8 +40,10 @@ export async function GET() {
   const hyperpayConfigured = !!(env.HYPERPAY_URL && env.HYPERPAY_ACCESS_TOKEN && env.HYPERPAY_ENTITY_ID);
   const geideaConfigured = !!(env.GEIDEA_MERCHANT_PUBLIC_KEY && env.GEIDEA_API_PASSWORD);
   const tamaraConfigured = !!env.TAMARA_API_TOKEN;
-  const sallaConfigured = !!(env.SALLA_CLIENT_ID && env.SALLA_CLIENT_SECRET && env.SALLA_TOKEN_ENCRYPTION_KEY);
-  const sallaAuth = dbActive ? await prisma.sallaAuthorization.findFirst({ where: { status: 'active' }, orderBy: { updatedAt: 'desc' } }) : null;
+  const sallaConfigured = !!(env.SALLA_CLIENT_ID && env.SALLA_CLIENT_SECRET && (env.SALLA_TOKEN_ENCRYPTION_KEY || process.env.TOKEN_ENCRYPTION_KEY));
+  const sallaAuth = dbActive
+    ? await prisma.sallaAuthorization.findFirst({ where: { status: 'active' }, orderBy: { updatedAt: 'desc' } }).catch(() => null)
+    : null;
 
   const integrations: IntegrationStatus[] = [
     {
