@@ -49,8 +49,55 @@ export function toLocalStatus(slug: string): string {
   return STATUS_ALIAS[slug] ?? slug;
 }
 
+const FOOD_KEYWORDS = [
+  'vegetable', 'vegetables', 'veg', 'fruit', 'fruits', 'herb', 'herbs', 'salad', 'sallad',
+  'produce', 'grocery', 'groceries', 'food', 'greens', 'fresh', 'organic', 'legume', 'legumes',
+  'خضار', 'خضروات', 'خضراوات', 'خضاره', 'فواكه', 'فاكهة', 'أعشاب', 'اعشاب', 'خضار وفواكه',
+  'خضروات وفواكه', 'بقوليات', 'حبوب', 'طعام', 'منتجات طازجة', 'منتجات غذائية',
+];
+
+export function categoryLabel(item: SallaRecord): string {
+  const raw = (item as Record<string, unknown>).category ?? (item as Record<string, unknown>).categories;
+  if (Array.isArray(raw)) {
+    return raw
+      .map((c) => (typeof c === 'string' ? c : String((c as Record<string, unknown>)?.name ?? (c as Record<string, unknown>)?.name_ar ?? '')))
+      .join(' ');
+  }
+  if (raw && typeof raw === 'object') return String((raw as Record<string, unknown>)?.name ?? (raw as Record<string, unknown>)?.name_ar ?? '');
+  return String(raw ?? '');
+}
+
+export function isFoodCatalogItem(item: SallaRecord): boolean {
+  const haystack = `${categoryLabel(item)} ${String(item.name ?? item.title ?? '')}`.toLowerCase();
+  return FOOD_KEYWORDS.some((keyword) => haystack.includes(keyword));
+}
+
+export function normalizeCatalogName(name: string): string {
+  return String(name ?? '').trim().toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]+/g, ' ');
+}
+
+export function matchesLocalCatalogName(remoteName: string, localNames: string[]): boolean {
+  const r = normalizeCatalogName(remoteName);
+  if (!r) return false;
+  return localNames.some((n) => {
+    const ln = normalizeCatalogName(n);
+    return ln && (ln.includes(r) || r.includes(ln));
+  });
+}
+
+export function inferCategories(categoryLabelText: string): [string, string] {
+  const label = categoryLabelText.toLowerCase();
+  if (label.includes('fruit') || label.includes('فاكهة') || label.includes('فواكه')) return ['fruits', 'kg'];
+  if (label.includes('herb') || label.includes('أعشاب') || label.includes('اعشاب')) return ['herbs', 'bunch'];
+  return ['vegetables', 'kg'];
+}
+
 export async function syncSallaProduct(payload: any, auth = undefined) {
   const item = dataOf(payload);
+  if (!isFoodCatalogItem(item)) {
+    const localNames = (await prisma.product.findMany({ select: { name: true } })).map((p) => p.name);
+    if (!matchesLocalCatalogName(String(item.name ?? item.title ?? ''), localNames)) return null;
+  }
   const id = String(item.id ?? item.product_id ?? '');
   if (!id) throw new Error('Salla product id is missing');
   const price = Number(item.price?.amount ?? item.price ?? 0);

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  product: { findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), update: vi.fn() },
+  product: { findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), update: vi.fn(), findMany: vi.fn() },
   customer: { findUnique: vi.fn(), upsert: vi.fn() },
   order: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
   sallaAuthorization: { findFirst: vi.fn() },
@@ -29,7 +29,7 @@ describe('syncSallaProduct', () => {
   it('creates a product when no local match exists', async () => {
     mocks.product.findUnique.mockResolvedValue(null);
     mocks.product.create.mockResolvedValue({ id: 'p1' });
-    const payload = { data: { id: 9001, name: 'Tomato', price: 5, image: 'https://x/i.png' } };
+    const payload = { data: { id: 9001, name: 'Tomato', category: { name: 'vegetables' }, price: 5, image: 'https://x/i.png' } };
     await syncSallaProduct(payload, auth);
     expect(mocks.product.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ sallaProductId: '9001', name: 'Tomato', shopPrice: 0 }),
@@ -40,11 +40,20 @@ describe('syncSallaProduct', () => {
   it('updates existing product by salla id', async () => {
     mocks.product.findUnique.mockResolvedValue({ id: 'local-1', sallaProductId: '9001' });
     mocks.product.update.mockResolvedValue({ id: 'local-1' });
-    await syncSallaProduct({ data: { id: 9001, name: 'Lettuce', price: 3 } }, auth);
+    await syncSallaProduct({ data: { id: 9001, name: 'Lettuce', category: 'vegetables', price: 3 } }, auth);
     expect(mocks.product.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'local-1' },
       data: expect.objectContaining({ name: 'Lettuce' }),
     }));
+    expect(mocks.product.create).not.toHaveBeenCalled();
+  });
+
+  it('skips non-food products (e.g. clothing) without a local name match', async () => {
+    mocks.product.findMany.mockResolvedValue([{ name: 'Tomato' }, { name: 'Cucumber' }]);
+    mocks.product.findUnique.mockResolvedValue(null);
+    mocks.product.create.mockResolvedValue({ id: 'p2' });
+    const result = await syncSallaProduct({ data: { id: 9002, name: 'فستان', price: 120 } }, auth);
+    expect(result).toBeNull();
     expect(mocks.product.create).not.toHaveBeenCalled();
   });
 });
