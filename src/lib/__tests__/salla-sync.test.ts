@@ -153,11 +153,12 @@ describe('pushCatalogToSalla', () => {
 
   it('creates remote products, links ids back and uploads image via multipart', async () => {
     mocks.product.findMany.mockResolvedValue([{ id: 'p1', name: 'Tomato', nameAr: 'طماطم', retailPrice: 5, stock: 10, imageUrl: 'https://x/t.png', sallaProductId: null }]);
-    mocks.sallaFetch.mockResolvedValue({ data: { id: 70001 } });
+    mocks.sallaFetch.mockResolvedValue({ data: { id: 70001, images: [] } });
     mocks.product.update.mockResolvedValue({});
     const result = await pushCatalogToSalla();
     expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/products', expect.objectContaining({ method: 'POST' }), auth);
     expect(mocks.product.update).toHaveBeenCalledWith(expect.objectContaining({ data: { sallaProductId: '70001', syncedAt: expect.any(Date) } }));
+    expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/products/70001', {}, auth);
     expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/products/70001/images', expect.objectContaining({ method: 'POST' }), auth);
     expect(result).toEqual({ ok: true, pushed: 1, created: 1, updated: 0, errors: [] });
   });

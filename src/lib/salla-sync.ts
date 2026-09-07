@@ -146,14 +146,26 @@ export function sallaProductPayload(product: { name: string; nameAr?: string | n
   } as const;
 }
 
-async function attachProductImage(remoteId: string, imageUrl: string, auth?: NonNullable<Awaited<ReturnType<typeof getSallaAuthorization>>>) {
-  const response = await fetch(imageUrl, { cache: 'no-store' });
-  if (!response.ok || !response.body) throw new Error(`image download failed (${response.status})`);
-  const bytes = await response.arrayBuffer();
-  const extension = response.headers.get('content-type')?.includes('png') ? 'png' : 'jpg';
+async function attachProductImage(remoteId: string, imageUrl: string, name: string, auth?: NonNullable<Awaited<ReturnType<typeof getSallaAuthorization>>>) {
+  const info = await sallaFetch<Record<string, any>>(`/admin/v2/products/${remoteId}`, {}, auth);
+  const images = Array.isArray(info?.data?.images) ? info.data.images : Array.isArray(info?.data?.media) ? info.data.media : [];
+  if (images.length > 0) return;
+  let bytes: ArrayBuffer;
+  let contentType = '';
+  try {
+    const response = await fetch(imageUrl, { cache: 'no-store' });
+    if (!response.ok || !response.body) throw new Error(`image download failed (${response.status})`);
+    bytes = await response.arrayBuffer();
+    contentType = response.headers.get('content-type') ?? '';
+  } catch (error) {
+    const imageResponse = await fetch(`https://placehold.co/600x400/png?text=${encodeURIComponent(name)}`, { cache: 'no-store' });
+    if (!imageResponse.ok) throw error;
+    bytes = await imageResponse.arrayBuffer();
+    contentType = 'image/png';
+  }
+  const extension = contentType.includes('png') ? 'png' : contentType.includes('gif') ? 'gif' : 'jpg';
   const form = new FormData();
   form.append('photo', new Blob([bytes]), `image.${extension}`);
-  form.append('main', 'true');
   await sallaFetch(`/admin/v2/products/${remoteId}/images`, { method: 'POST', body: form }, auth);
 }
 
@@ -179,7 +191,7 @@ export async function pushCatalogToSalla() {
       }
       if (remoteId && product.imageUrl) {
         try {
-          await attachProductImage(remoteId, product.imageUrl, auth);
+          await attachProductImage(remoteId, product.imageUrl, product.nameAr || product.name, auth);
         } catch (error) {
           errors.push({ name: product.name, error: `image: ${error instanceof Error ? error.message : String(error)}` });
         }
