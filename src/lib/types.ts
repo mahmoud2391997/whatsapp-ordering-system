@@ -74,6 +74,9 @@ export interface Order {
   menu_page_id?: string | null;
   created_at: string;
   order_items?: OrderItem[];
+  salla_order_id?: string | null;
+  salla_sync_status?: string;
+  salla_sync_error?: string | null;
 }
 
 export interface Conversation {
