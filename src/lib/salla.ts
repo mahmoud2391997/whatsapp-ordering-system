@@ -100,12 +100,14 @@ const SALLA_WEBHOOK_EVENTS = ['product.created', 'product.updated', 'product.del
 export async function registerSallaWebhooks(auth: NonNullable<Awaited<ReturnType<typeof getSallaAuthorization>>>) {
   const webhookUrl = process.env.SALLA_WEBHOOK_URL;
   if (!webhookUrl) throw new Error('SALLA_WEBHOOK_URL is not configured');
-  const existing = Array.isArray(auth.webhookIds) ? auth.webhookIds : [];
-  if (existing.length >= SALLA_WEBHOOK_EVENTS.length) return existing;
-  const subscriptions: unknown[] = [...existing];
-  for (const event of SALLA_WEBHOOK_EVENTS.slice(existing.length)) {
-    const response = await sallaFetch<{ data?: { id?: string | number } }>('/admin/v2/webhooks/subscribe', { method: 'POST', body: JSON.stringify({ name: event, event, url: webhookUrl }) }, auth);
-    subscriptions.push({ event, id: response.data?.id ?? null });
+  const existing = Array.isArray(auth.webhookIds) ? auth.webhookIds as Array<{ event?: string; id?: string | number }> : [];
+  const subscriptions: Array<{ event: string; id: string | number | null }> = SALLA_WEBHOOK_EVENTS.map(event => {
+    const match = existing.find(item => item.event === event && item.id != null);
+    return { event, id: match?.id ?? null };
+  });
+  for (const subscription of subscriptions.filter(item => item.id == null)) {
+    const response = await sallaFetch<{ data?: { id?: string | number } }>('/admin/v2/webhooks/subscribe', { method: 'POST', body: JSON.stringify({ name: subscription.event, event: subscription.event, url: webhookUrl }) }, auth);
+    subscription.id = response.data?.id ?? null;
   }
   await prisma.sallaAuthorization.update({ where: { id: auth.id }, data: { webhookIds: subscriptions as Prisma.InputJsonValue, lastSyncError: null } });
   return subscriptions;

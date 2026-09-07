@@ -12,9 +12,13 @@ export async function POST(request: NextRequest) {
   try { payload = JSON.parse(rawBody); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   const eventType = String(payload.event ?? payload.event_type ?? 'unknown');
   const eventId = String(payload.id ?? request.headers.get('x-salla-event-id') ?? `${eventType}:${crypto.randomUUID()}`);
-  const existing = await prisma.webhookEvent.findFirst({ where: { source: 'salla', eventType, payload: { path: ['id'], equals: eventId } } });
-  if (existing?.processed) return NextResponse.json({ ok: true, duplicate: true });
-  const event = existing ?? await prisma.webhookEvent.create({ data: { source: 'salla', eventType, payload: payload as Prisma.InputJsonValue } });
+  let event;
+  try {
+    event = await prisma.webhookEvent.create({ data: { source: 'salla', eventType, eventKey: eventId, payload: payload as Prisma.InputJsonValue } });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return NextResponse.json({ ok: true, duplicate: true });
+    throw error;
+  }
   try {
     const merchant = payload.merchant as { id?: string | number } | undefined;
     const merchantId = String(payload.merchant_id ?? merchant?.id ?? '');
