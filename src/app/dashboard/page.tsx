@@ -391,8 +391,9 @@ function OrdersSection({ orders }: { orders: Order[] }) {
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Customer</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Items</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Location</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Payment</th>
+  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Salla</th>
+  <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Payment</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-right">Total</th>
                 <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-right">Action</th>
               </tr>
@@ -418,10 +419,17 @@ function OrdersSection({ orders }: { orders: Order[] }) {
                       </div>
                     </td>
                     <td className="px-4 py-3.5 text-xs text-gray-500 max-w-28">{order.location}</td>
-                    <td className="px-4 py-3.5">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${sc.color}`}>{sc.label}</span>
-                    </td>
-                    <td className="px-4 py-3.5">
+  <td className="px-4 py-3.5">
+  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${sc.color}`}>{sc.label}</span>
+  </td>
+  <td className="px-4 py-3.5">
+  <div className="flex flex-col gap-1">
+  <span className={`text-xs px-2 py-0.5 rounded-full font-medium w-fit ${order.salla_sync_status === 'synced' ? 'bg-emerald-100 text-emerald-700' : order.salla_sync_status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>{order.salla_sync_status ?? 'not synced'}</span>
+  <span className="text-[10px] text-gray-400 max-w-28 truncate">{order.salla_order_id ?? 'Not linked'}</span>
+  {order.salla_sync_status === 'failed' && <button onClick={() => fetch('/api/salla/retry', { method: 'POST' }).then(() => window.location.reload())} className="text-[10px] text-emerald-600 hover:underline text-left">Retry</button>}
+  </div>
+  </td>
+  <td className="px-4 py-3.5">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         order.payment_status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
                         order.payment_status === 'cod' ? 'bg-blue-100 text-blue-700' :
@@ -832,6 +840,19 @@ function IntegrationsSection() {
   const [data, setData] = useState<IntegrationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState<string | null>(null);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+
+  const runSallaAction = async (action: string) => {
+    setSyncing(action);
+    setSyncResult(null);
+    try {
+      const endpoint = action === 'retry' ? '/api/salla/retry' : `/api/salla/sync/${action}`;
+      const response = await fetch(endpoint, { method: 'POST' });
+      const result = await response.json();
+      setSyncResult(response.ok ? `${action} complete${result.succeeded !== undefined ? `: ${result.succeeded} succeeded, ${result.stillFailing} still failing` : ''}` : result.error ?? 'Sync failed');
+    } catch { setSyncResult('Sync failed'); } finally { setSyncing(null); }
+  };
 
   useEffect(() => {
     (async () => {
@@ -927,6 +948,25 @@ function IntegrationsSection() {
           <p className="text-xs text-gray-500">Recent Errors</p>
         </div>
       </div>
+
+      {/* Salla controls */}
+      {(() => {
+        const salla = data.integrations.find((item) => item.service === 'salla');
+        return <div className="bg-white rounded-xl border border-emerald-100 shadow-sm p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="font-semibold text-gray-900">Salla Partner App</h2>
+              <p className="text-xs text-gray-500 mt-1">{salla?.configured ? 'Connected store synchronization' : 'Connect a Salla store to sync catalog and orders'}</p>
+              {salla?.lastEvent && <p className="text-xs text-gray-400 mt-2">Last webhook: {new Date(salla.lastEvent).toLocaleString()}</p>}
+            </div>
+            <a href="/api/salla/install" className="text-sm font-medium text-emerald-700 hover:underline">{salla?.configured ? 'Reconnect' : 'Connect to Salla'}</a>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-4">
+            {['products', 'customers', 'orders', 'retry'].map((action) => <button key={action} onClick={() => runSallaAction(action)} disabled={syncing !== null} className="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 disabled:opacity-50">{syncing === action ? 'Working...' : action === 'retry' ? 'Retry failed syncs' : `Sync ${action}`}</button>)}
+          </div>
+          {syncResult && <p className="text-xs text-gray-600 mt-3" role="status">{syncResult}</p>}
+        </div>;
+      })()}
 
       {/* Integration cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

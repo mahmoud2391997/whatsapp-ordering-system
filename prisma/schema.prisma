@@ -22,6 +22,7 @@ model SallaAuthorization {
   lastSyncAt      DateTime? @map("last_sync_at") @db.Timestamptz
   lastSyncError   String?  @map("last_sync_error")
   lastWebhookAt   DateTime? @map("last_webhook_at") @db.Timestamptz
+  webhookIds      Json?    @map("webhook_ids")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
 

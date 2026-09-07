@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 
 const API_URL = process.env.SALLA_API_URL ?? 'https://api.salla.dev';
@@ -92,6 +93,22 @@ export async function sallaFetch<T>(path: string, init: RequestInit = {}, auth?:
   const response = await fetch(`${API_URL}${path}`, { ...init, headers: { accept: 'application/json', ...(init.body ? { 'content-type': 'application/json' } : {}), ...init.headers, authorization: `Bearer ${token}` }, cache: 'no-store' });
   if (!response.ok) throw new Error(`Salla API ${response.status}: ${await response.text()}`);
   return response.json() as Promise<T>;
+}
+
+const SALLA_WEBHOOK_EVENTS = ['product.created', 'product.updated', 'product.deleted', 'customer.created', 'customer.updated', 'order.status.update', 'app.uninstalled'];
+
+export async function registerSallaWebhooks(auth: NonNullable<Awaited<ReturnType<typeof getSallaAuthorization>>>) {
+  const webhookUrl = process.env.SALLA_WEBHOOK_URL;
+  if (!webhookUrl) throw new Error('SALLA_WEBHOOK_URL is not configured');
+  const existing = Array.isArray(auth.webhookIds) ? auth.webhookIds : [];
+  if (existing.length >= SALLA_WEBHOOK_EVENTS.length) return existing;
+  const subscriptions: unknown[] = [...existing];
+  for (const event of SALLA_WEBHOOK_EVENTS.slice(existing.length)) {
+    const response = await sallaFetch<{ data?: { id?: string | number } }>('/admin/v2/webhooks/subscribe', { method: 'POST', body: JSON.stringify({ name: event, event, url: webhookUrl }) }, auth);
+    subscriptions.push({ event, id: response.data?.id ?? null });
+  }
+  await prisma.sallaAuthorization.update({ where: { id: auth.id }, data: { webhookIds: subscriptions as Prisma.InputJsonValue, lastSyncError: null } });
+  return subscriptions;
 }
 
 export function verifySallaWebhook(rawBody: string, signature: string | null) {

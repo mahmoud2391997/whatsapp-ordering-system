@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_TRANSITIONS, OrderStatus, isOrderStatus } from '@/lib/types';
 import { sendWhatsApp } from '@/lib/whatsapp';
+import { pushOrderStatusToSalla } from '@/lib/salla-sync';
 
 export const ORDER_STATUSES = Object.keys(ORDER_STATUS_LABELS) as OrderStatus[];
 
@@ -38,6 +39,14 @@ export async function transitionOrder(orderId: string, nextStatus: OrderStatus, 
     if (updated.customerPhone) {
       const label = ORDER_STATUS_LABELS[nextStatus];
       await sendWhatsApp(updated.customerPhone, `Order ${updated.id} update:\n${label.en}\n${label.ar}`);
+    }
+    if (updated.sallaOrderId) {
+      try {
+        await pushOrderStatusToSalla(updated.id, nextStatus);
+        await prisma.order.update({ where: { id: updated.id }, data: { sallaSyncStatus: 'synced', sallaSyncError: null, sallaSyncedAt: new Date() } });
+      } catch (error) {
+        await prisma.order.update({ where: { id: updated.id }, data: { sallaSyncStatus: 'failed', sallaSyncError: error instanceof Error ? error.message : 'Salla status sync failed' } }).catch(() => undefined);
+      }
     }
     return updated;
   });

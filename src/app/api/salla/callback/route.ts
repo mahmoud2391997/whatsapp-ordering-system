@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { exchangeSallaCode, encryptToken, safeEqual, sallaFetch } from '@/lib/salla';
+import { exchangeSallaCode, encryptToken, safeEqual, sallaFetch, registerSallaWebhooks } from '@/lib/salla';
 import { prisma } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
@@ -14,7 +14,12 @@ export async function GET(request: NextRequest) {
     const store = await sallaFetch<{ data?: { id?: string | number; name?: string } }>('/admin/v2/store/info', {}, { id: 'callback', merchantId: 'pending', accessToken: encryptToken(token.access_token), refreshToken: null, expiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : null, scopes: token.scope ?? null, status: 'active', lastSyncAt: null, lastSyncError: null, lastWebhookAt: null, createdAt: new Date(), updatedAt: new Date() } as any).catch(() => null);
     const merchantId = params.get('merchant') ?? params.get('merchant_id') ?? String(store?.data?.id ?? `pending-${crypto.randomUUID()}`);
     const storeName = store?.data?.name ?? null;
-    await prisma.sallaAuthorization.upsert({ where: { merchantId }, update: { storeName, accessToken: encryptToken(token.access_token), refreshToken: token.refresh_token ? encryptToken(token.refresh_token) : undefined, expiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : null, scopes: token.scope, status: 'active', lastSyncError: null }, create: { merchantId, accessToken: encryptToken(token.access_token), refreshToken: token.refresh_token ? encryptToken(token.refresh_token) : null, expiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : null, scopes: token.scope, storeName, status: 'active' } });
+    const auth = await prisma.sallaAuthorization.upsert({ where: { merchantId }, update: { storeName, accessToken: encryptToken(token.access_token), refreshToken: token.refresh_token ? encryptToken(token.refresh_token) : undefined, expiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : null, scopes: token.scope, status: 'active', lastSyncError: null }, create: { merchantId, accessToken: encryptToken(token.access_token), refreshToken: token.refresh_token ? encryptToken(token.refresh_token) : null, expiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : null, scopes: token.scope, storeName, status: 'active' } });
+    try {
+      await registerSallaWebhooks(auth);
+    } catch (webhookError) {
+      await prisma.sallaAuthorization.update({ where: { id: auth.id }, data: { lastSyncError: webhookError instanceof Error ? webhookError.message : 'Webhook registration failed' } });
+    }
     const response = NextResponse.redirect(new URL('/dashboard?integration=salla&connected=1', request.url));
     response.cookies.delete('salla_oauth_state');
     return response;
