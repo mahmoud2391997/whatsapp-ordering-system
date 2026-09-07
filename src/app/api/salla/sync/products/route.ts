@@ -15,8 +15,9 @@ export async function POST() {
         const id = String(item.id ?? '');
         if (!id) continue;
         const name = String(item.name ?? item.name_en ?? 'Salla product');
-        const price = Number(item.price ?? item.regular_price ?? 0);
-        const image = String((item.image as Record<string, unknown> | undefined)?.url ?? item.image_url ?? '');
+        const priceOf = (v: unknown) => (v as { amount?: number })?.amount ?? v;
+        const price = Number(priceOf(item.price) ?? priceOf(item.regular_price) ?? 0) || 0;
+        const image = String((item.image as Record<string, unknown> | undefined)?.url ?? item.main_image ?? item.thumbnail ?? item.image_url ?? '');
         const existing = await prisma.product.findUnique({ where: { sallaProductId: id } });
         await prisma.product.upsert({ where: { sallaProductId: id }, update: { name, nameAr: existing?.nameAr ?? name, retailPrice: price, stock: Number(item.quantity ?? item.stock ?? existing?.stock ?? 0), imageUrl: image || existing?.imageUrl || '', syncedAt: new Date() }, create: { name, nameAr: name, retailPrice: price, shopPrice: 0, wholesalePrice: 0, stock: Number(item.quantity ?? item.stock ?? 0), imageUrl: image, sallaProductId: id, syncedAt: new Date() } });
         synced++;

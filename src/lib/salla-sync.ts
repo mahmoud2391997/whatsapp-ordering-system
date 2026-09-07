@@ -13,7 +13,7 @@ export async function syncSallaProduct(payload: any, auth = undefined) {
   if (!id) throw new Error('Salla product id is missing');
   const price = Number(item.price?.amount ?? item.price ?? 0);
   const name = String(item.name ?? item.title ?? 'Salla product');
-  const imageUrl = String(item.image?.url ?? item.thumbnail ?? '');
+  const imageUrl = String(item.image?.url ?? item.main_image ?? item.thumbnail ?? '');
   const existing = await prisma.product.findUnique({ where: { sallaProductId: id } });
   const data = { name, nameAr: String(item.name_ar ?? name), retailPrice: price, syncedAt: new Date() };
   if (existing) return prisma.product.update({ where: { id: existing.id }, data });
