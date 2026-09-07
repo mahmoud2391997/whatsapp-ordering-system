@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { prisma } from '@/lib/db';
 import { findCustomerOrder, statusReply, normalizePhone } from '@/lib/orders';
@@ -32,16 +33,20 @@ function extractText(message: any) {
 export async function POST(req: Request) {
   const raw = await req.text();
   if (!validSignature(raw, req.headers.get('x-hub-signature-256'))) return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-  const payload = JSON.parse(raw);
+  let payload: any;
+  try { payload = JSON.parse(raw); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   const messages = payload?.entry?.flatMap((entry: any) => entry.changes?.flatMap((change: any) => change.value?.messages ?? []) ?? []) ?? [];
   for (const message of messages) {
     const phone = normalizePhone(message.from ?? '');
     const text = extractText(message).trim();
     if (!phone || !text) continue;
     const eventId = message.id ?? `${phone}:${message.timestamp}:${text}`;
-    const existing = await prisma.webhookEvent.findFirst({ where: { source: 'whatsapp', eventType: eventId } });
-    if (existing) continue;
-    await prisma.webhookEvent.create({ data: { source: 'whatsapp', eventType: eventId, payload: message, processed: false } });
+    try {
+      await prisma.webhookEvent.create({ data: { source: 'whatsapp', eventType: 'message', eventKey: String(eventId), payload: message, processed: false } });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') continue;
+      throw error;
+    }
     const conversation = await prisma.conversation.findFirst({ where: { phone: { contains: phone } } });
     const reply = /status|where|order|tracking|حالة|طلب|فين|أين/i.test(text)
       ? await findCustomerOrder(text.match(/ORD[- ]?\d+/i)?.[0]?.replace(' ', '-'), phone).then(order => order ? statusReply(order) : 'We could not find an active order for this WhatsApp number. Please send your order reference, for example ORD-123456.')
@@ -49,7 +54,7 @@ export async function POST(req: Request) {
     if (conversation) await prisma.message.create({ data: { conversationId: conversation.id, sender: 'customer', text, time: nowTime(), type: 'whatsapp' } });
     await sendWhatsApp(phone, reply);
     if (conversation) await prisma.message.create({ data: { conversationId: conversation.id, sender: 'bot', text: reply, time: nowTime(), type: 'status_reply' } });
-    await prisma.webhookEvent.updateMany({ where: { source: 'whatsapp', eventType: eventId }, data: { processed: true } });
+    await prisma.webhookEvent.updateMany({ where: { source: 'whatsapp', eventType: 'message', eventKey: String(eventId) }, data: { processed: true } });
   }
   return NextResponse.json({ received: true });
 }

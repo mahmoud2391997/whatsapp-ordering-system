@@ -200,7 +200,7 @@ model Transaction {
   currency         String   @default("SAR")
   status           String   @default("pending")
   paymentMethod    String?  @map("payment_method")
-  providerId       String?  @map("provider_id")
+  providerId       String?  @unique @map("provider_id")
   providerResponse Json?    @map("provider_response")
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz
@@ -219,11 +219,13 @@ model WebhookEvent {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   source    String   @default("system")
   eventType String   @default("unknown") @map("event_type")
+  eventKey  String   @default("") @map("event_key")
   payload   Json     @default("{}")
   processed Boolean  @default(false)
   error     String?
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
+  @@unique([source, eventKey])
   @@index([source])
   @@index([processed])
   @@index([createdAt(sort: Desc)])
