@@ -30,6 +30,7 @@ export async function POST() {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Salla product sync failed';
     await prisma.sallaAuthorization.update({ where: { id: auth.id }, data: { lastSyncError: message } });
-    return NextResponse.json({ error: message }, { status: 502 });
+    const status = message === 'SALLA_REAUTH_REQUIRED' || message === 'SALLA_NOT_CONNECTED' ? 401 : 502;
+    return NextResponse.json({ error: message, retryable: status >= 500 }, { status });
   }
 }

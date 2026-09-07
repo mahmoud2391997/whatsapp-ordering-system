@@ -36,7 +36,21 @@ export function safeEqual(a: string, b: string) {
 }
 
 export function sallaRedirectUri() {
-  return `${process.env.APP_URL ?? process.env.VERCEL_URL ?? 'http://localhost:3000'}/api/salla/callback`;
+  const configuredUrl = process.env.APP_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  return new URL('/api/salla/callback', configuredUrl).toString();
+}
+
+export function sallaApiUrl(path: string) {
+  return new URL(path, API_URL).toString();
+}
+
+export async function fetchSallaStoreInfo(accessToken: string) {
+  const response = await fetch(sallaApiUrl('/admin/v2/store/info'), {
+    headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new Error(`Salla store lookup failed (${response.status})`);
+  return response.json() as Promise<{ data?: { id?: string | number; name?: string } }>;
 }
 
 export function sallaInstallUrl(state: string) {
