@@ -30,3 +30,5 @@ prisma/migrations/**/migration_lock.toml
 *.njsproj
 *.sln
 *.sw?
+.vercel
+.env*
