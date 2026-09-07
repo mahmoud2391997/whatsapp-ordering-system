@@ -1,0 +1,117 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  product: { findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), update: vi.fn() },
+  customer: { findUnique: vi.fn(), upsert: vi.fn() },
+  order: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+  sallaAuthorization: { findFirst: vi.fn() },
+  getSallaAuthorization: vi.fn(),
+  sallaFetch: vi.fn(),
+}));
+
+vi.mock('@/lib/db', () => ({ prisma: mocks }));
+vi.mock('@/lib/salla', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/salla')>();
+  return { ...actual, getSallaAuthorization: mocks.getSallaAuthorization, sallaFetch: mocks.sallaFetch };
+});
+
+import { syncSallaProduct, syncSallaCustomer, syncSallaOrder, pushOrderToSalla, pushOrderStatusToSalla } from '@/lib/salla-sync';
+
+const auth = { id: 'auth-1', merchantId: 'm1', accessToken: 'enc', refreshToken: null, status: 'active' } as any;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.sallaAuthorization.findFirst.mockResolvedValue(auth);
+  mocks.getSallaAuthorization.mockResolvedValue(auth);
+});
+
+describe('syncSallaProduct', () => {
+  it('creates a product when no local match exists', async () => {
+    mocks.product.findUnique.mockResolvedValue(null);
+    mocks.product.create.mockResolvedValue({ id: 'p1' });
+    const payload = { data: { id: 9001, name: 'Tomato', price: 5, image: 'https://x/i.png' } };
+    await syncSallaProduct(payload, auth);
+    expect(mocks.product.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ sallaProductId: '9001', name: 'Tomato', shopPrice: 0 }),
+    }));
+    expect(mocks.product.update).not.toHaveBeenCalled();
+  });
+
+  it('updates existing product by salla id', async () => {
+    mocks.product.findUnique.mockResolvedValue({ id: 'local-1', sallaProductId: '9001' });
+    mocks.product.update.mockResolvedValue({ id: 'local-1' });
+    await syncSallaProduct({ data: { id: 9001, name: 'Lettuce', price: 3 } }, auth);
+    expect(mocks.product.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'local-1' },
+      data: expect.objectContaining({ name: 'Lettuce' }),
+    }));
+    expect(mocks.product.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('syncSallaCustomer', () => {
+  it('upserts by phone with salla ids', async () => {
+    mocks.customer.upsert.mockResolvedValue({ id: 'c1' });
+    await syncSallaCustomer({ data: { id: 42, first_name: 'Ali', last_name: 'Omar', phone: '966500000000', email: 'a@b.com' } });
+    expect(mocks.customer.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { phone: '966500000000' },
+      create: expect.objectContaining({ sallaCustomerId: '42', sallaEmail: 'a@b.com' }),
+    }));
+  });
+});
+
+describe('syncSallaOrder', () => {
+  it('creates order with SALLA-prefixed id on first sync', async () => {
+    mocks.order.findUnique.mockResolvedValue(null);
+    mocks.order.create.mockResolvedValue({ id: 'SALLA-555' });
+    const payload = { data: { id: 555, customer: { name: 'Ali', phone: '9665' }, total: 100, status: { value: 'new' } } };
+    await syncSallaOrder(payload);
+    expect(mocks.order.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ id: 'SALLA-555', sallaOrderId: '555', sallaSyncStatus: 'synced' }),
+    }));
+  });
+});
+
+describe('pushOrderToSalla', () => {
+  it('throws when not connected', async () => {
+    mocks.getSallaAuthorization.mockResolvedValue(null);
+    await expect(pushOrderToSalla('ORD-123')).rejects.toThrow('SALLA_NOT_CONNECTED');
+  });
+
+  it('throws when order not found', async () => {
+    mocks.getSallaAuthorization.mockResolvedValue(auth);
+    mocks.order.findUnique.mockResolvedValue(null);
+    await expect(pushOrderToSalla('ORD-123')).rejects.toThrow('ORDER_NOT_FOUND');
+  });
+
+  it('pushes order via API and marks synced', async () => {
+    mocks.getSallaAuthorization.mockResolvedValue(auth);
+    mocks.order.findUnique.mockResolvedValue({ id: 'ORD-123', customerName: 'Ali', customerPhone: '9665', customerType: 'retail', total: 50, location: 'Riyadh', orderItems: [{ productName: 'Tomato', qty: 2, unit: 'kg', unitPrice: 25 }] });
+    mocks.sallaFetch.mockResolvedValue({ data: { id: 3000 } });
+    mocks.order.update.mockResolvedValue({});
+    const result = await pushOrderToSalla('ORD-123');
+    const [path, init] = mocks.sallaFetch.mock.calls[0];
+    expect(path).toBe('/admin/v2/orders');
+    expect(JSON.parse(init.body)).toEqual(expect.objectContaining({ reference_id: 'ORD-123', total: 50 }));
+    expect(mocks.order.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: { sallaOrderId: '3000', sallaSyncStatus: 'synced', sallaSyncedAt: expect.any(Date), sallaSyncError: null },
+    }));
+    expect(result).toEqual({ data: { id: 3000 } });
+  });
+});
+
+describe('pushOrderStatusToSalla', () => {
+  it('throws when order has no salla link', async () => {
+    mocks.getSallaAuthorization.mockResolvedValue(auth);
+    mocks.order.findUnique.mockResolvedValue({ id: 'ORD-1', sallaOrderId: null });
+    await expect(pushOrderStatusToSalla('ORD-1', 'confirmed')).rejects.toThrow('SALLA_ORDER_NOT_LINKED');
+  });
+
+  it('posts status update for linked order', async () => {
+    mocks.getSallaAuthorization.mockResolvedValue(auth);
+    mocks.order.findUnique.mockResolvedValue({ id: 'ORD-1', sallaOrderId: '555' });
+    mocks.sallaFetch.mockResolvedValue({ data: { id: '555' } });
+    await pushOrderStatusToSalla('ORD-1', 'confirmed');
+    expect(mocks.sallaFetch).toHaveBeenCalledWith('/admin/v2/orders/555/status', expect.objectContaining({ method: 'POST' }), auth);
+  });
+});
