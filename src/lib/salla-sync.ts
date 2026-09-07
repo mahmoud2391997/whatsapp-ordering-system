@@ -141,6 +141,8 @@ export function sallaProductPayload(product: { name: string; nameAr?: string | n
     quantity: Number(product.stock) || 0,
     status: Number(product.stock) > 0 ? 'sale' : 'out',
     require_shipping: true,
+    weight: 1,
+    weight_type: 'kg',
   };
   if (product.imageUrl) payload.images = [{ original: product.imageUrl, default: true }];
   return payload;

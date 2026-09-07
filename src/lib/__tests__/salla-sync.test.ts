@@ -135,6 +135,8 @@ describe('sallaProductPayload', () => {
       quantity: 20,
       status: 'sale',
       require_shipping: true,
+      weight: 1,
+      weight_type: 'kg',
       images: [{ original: 'https://x/t.png', default: true }],
     });
   });
