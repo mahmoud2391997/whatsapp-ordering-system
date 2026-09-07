@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { exchangeSallaCode, encryptToken, safeEqual, fetchSallaStoreInfo, registerSallaWebhooks } from '@/lib/salla';
 import { prisma } from '@/lib/db';
@@ -11,8 +10,9 @@ export async function GET(request: NextRequest) {
   if (!state || !storedState || !safeEqual(state, storedState) || !code) return NextResponse.json({ error: 'Invalid OAuth callback' }, { status: 400 });
   try {
     const token = await exchangeSallaCode(code);
-    const store = await fetchSallaStoreInfo(token.access_token).catch(() => null);
-    const merchantId = params.get('merchant') ?? params.get('merchant_id') ?? String(store?.data?.id ?? `pending-${crypto.randomUUID()}`);
+    const store = await fetchSallaStoreInfo(token.access_token);
+    const merchantId = String(store?.data?.id ?? params.get('merchant') ?? params.get('merchant_id') ?? '');
+    if (!merchantId) throw new Error('Salla did not return a merchant id');
     const storeName = store?.data?.name ?? null;
     const auth = await prisma.sallaAuthorization.upsert({ where: { merchantId }, update: { storeName, accessToken: encryptToken(token.access_token), refreshToken: token.refresh_token ? encryptToken(token.refresh_token) : undefined, expiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : null, scopes: token.scope, status: 'active', lastSyncError: null }, create: { merchantId, accessToken: encryptToken(token.access_token), refreshToken: token.refresh_token ? encryptToken(token.refresh_token) : null, expiresAt: token.expires_in ? new Date(Date.now() + token.expires_in * 1000) : null, scopes: token.scope, storeName, status: 'active' } });
     try {

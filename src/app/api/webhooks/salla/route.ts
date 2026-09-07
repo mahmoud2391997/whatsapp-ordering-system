@@ -11,10 +11,11 @@ export async function POST(request: NextRequest) {
   let payload: Record<string, unknown>;
   try { payload = JSON.parse(rawBody); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   const eventType = String(payload.event ?? payload.event_type ?? 'unknown');
-  const eventId = String(payload.id ?? request.headers.get('x-salla-event-id') ?? `${eventType}:${crypto.randomUUID()}`);
+  const eventId = String(payload.id ?? request.headers.get('x-salla-event-id') ?? crypto.createHash('sha256').update(rawBody).digest('hex'));
+  const eventKey = `${eventType}:${eventId}`;
   let event;
   try {
-    event = await prisma.webhookEvent.create({ data: { source: 'salla', eventType, eventKey: eventId, payload: payload as Prisma.InputJsonValue } });
+    event = await prisma.webhookEvent.create({ data: { source: 'salla', eventType, eventKey, payload: payload as Prisma.InputJsonValue } });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return NextResponse.json({ ok: true, duplicate: true });
     throw error;
