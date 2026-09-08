@@ -1,22 +1,11 @@
-import { getProducts } from '@/lib/data';
-import MenuCart from '@/components/MenuCart';
+import { redirect } from 'next/navigation';
 
-export const dynamic = 'force-dynamic';
+export default function MenuPage() {
+  const storefrontUrl = process.env.NEXT_PUBLIC_SALLA_STOREFRONT_URL;
 
-export default async function MenuPage() {
-  const products = await getProducts();
+  if (storefrontUrl) {
+    redirect(storefrontUrl);
+  }
 
-  return (
-    <div>
-      <div className="bg-emerald-800 text-white text-center py-2 text-sm font-medium">
-        Admin Preview — <a href="/dashboard" className="underline hover:text-emerald-200">Back to Dashboard</a>
-      </div>
-      <MenuCart
-        products={products}
-        customerName="Preview"
-        customerType="retail"
-        customerId=""
-      />
-    </div>
-  );
+  redirect('/dashboard');
 }

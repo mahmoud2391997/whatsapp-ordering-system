@@ -100,7 +100,11 @@ export default function DashboardPage() {
     { id: 'chatbot',        label: 'AI Bot Test',     icon: MessageSquare },
   ];
 
-  const goMenu = useCallback(() => { window.location.href = '/menu'; }, []);
+  const goMenu = useCallback(() => {
+    const storefrontUrl = process.env.NEXT_PUBLIC_SALLA_STOREFRONT_URL;
+    const destination = storefrontUrl || '/menu';
+    window.open(destination, '_blank', 'noopener,noreferrer');
+  }, []);
 
   if (loading) {
     return (
