@@ -63,8 +63,23 @@ export function sallaApiUrl(path: string) {
 function catalogAmount(value: unknown): number {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
   if (typeof value === 'string') return Number(value.replace(/[ ,]/g, '')) || 0;
-  if (value && typeof value === 'object') return catalogAmount((value as Record<string, unknown>).amount);
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return catalogAmount(record.amount ?? record.value);
+  }
   return 0;
+}
+
+function catalogImage(item: Record<string, any>): string {
+  const candidates = [
+    item.image?.url,
+    item.image?.original,
+    item.main_image,
+    item.thumbnail,
+    item.images?.[0]?.url,
+    item.images?.[0]?.original,
+  ];
+  return candidates.find((value) => typeof value === 'string' && value.length > 0) ?? '';
 }
 
 export interface SallaCatalogProduct {
@@ -87,19 +102,21 @@ function catalogCategory(item: Record<string, any>): SallaCatalogProduct['catego
 }
 
 export function normalizeSallaProduct(item: Record<string, any>): SallaCatalogProduct {
-  const quantity = Number(item.quantity ?? item.stock ?? item.inventory_quantity ?? 0);
-  const price = catalogAmount(item.price ?? item.sale_price ?? item.regular_price);
+  const quantity = catalogAmount(item.quantity ?? item.stock ?? item.inventory_quantity ?? item.available_quantity);
+  const price = catalogAmount(item.price ?? item.sale_price ?? item.regular_price ?? item.price?.amount);
   const name = String(item.name ?? item.title ?? 'Product');
+  const nameAr = String(item.name_ar ?? item.arabic_name ?? item.name?.ar ?? name);
+  const stock = Number.isFinite(quantity) ? Math.max(0, quantity) : 0;
   return {
     id: String(item.id ?? item.product_id),
     name,
-    nameAr: String(item.name_ar ?? item.arabic_name ?? name),
+    nameAr,
     category: catalogCategory(item),
-    unit: String(item.unit ?? item.measurement_unit ?? 'item'),
+    unit: String(item.unit ?? item.measurement_unit ?? item.unit_name ?? 'item'),
     price,
-    stock: Number.isFinite(quantity) ? Math.max(0, quantity) : 0,
-    imageUrl: String(item.image?.url ?? item.main_image ?? item.thumbnail ?? item.images?.[0]?.url ?? ''),
-    purchasable: quantity > 0 && item.status !== 'out' && item.status !== 'draft',
+    stock,
+    imageUrl: catalogImage(item),
+    purchasable: stock > 0 && item.status !== 'out' && item.status !== 'draft' && item.is_available !== false,
   };
 }
 

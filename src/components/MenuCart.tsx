@@ -288,6 +288,13 @@ export default function MenuCart({ products, customerName, customerType, custome
       )}
 
       {/* Products */}
+      {products.length === 0 && !catalogError && (
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
+          <p className="text-gray-600">No products are currently published in the connected Salla store.</p>
+          <p className="mt-2 text-sm text-gray-400">Publish products in Salla and refresh this page to display them here.</p>
+        </div>
+      )}
+
       {[
         { key: 'vegetables', items: vegetables, title: 'Vegetables', titleAr: 'الخضروات' },
         { key: 'fruits',     items: fruits,     title: 'Fruits',     titleAr: 'الفواكه' },
@@ -306,11 +313,17 @@ export default function MenuCart({ products, customerName, customerType, custome
               return (
                 <div key={product.id} className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all group overflow-hidden">
                   <div className="relative overflow-hidden h-40">
-                    <img
-                      src={product.image_url}
-                      alt={product.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
+                    {product.image_url ? (
+                      <img
+                        src={product.image_url}
+                        alt={product.name_ar || product.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-emerald-50 flex items-center justify-center text-emerald-700 text-xs text-center px-3">
+                        Salla product image unavailable
+                      </div>
+                    )}
                     <span className={`absolute top-2 left-2 text-xs font-medium px-2 py-0.5 rounded-full ${categoryLabels[product.category]?.color ?? ''}`}>
                       {categoryLabels[product.category]?.labelAr ?? product.category}
                     </span>
@@ -322,7 +335,7 @@ export default function MenuCart({ products, customerName, customerType, custome
                     <h3 className="font-semibold text-gray-900 text-sm">{product.name}</h3>
                     <p className="text-gray-500 text-xs mb-2">{product.name_ar} · per {product.unit}</p>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-lg font-bold text-emerald-600">{price} EGP</span>
+                      <span className="text-lg font-bold text-emerald-600">{price} SAR</span>
                       <span className="text-xs text-gray-400">/{product.unit}</span>
                     </div>
                     {inCart ? (
@@ -365,7 +378,7 @@ export default function MenuCart({ products, customerName, customerType, custome
           className="fixed bottom-4 right-4 sm:hidden z-30 bg-emerald-600 text-white px-5 py-3 rounded-full shadow-lg flex items-center gap-2 font-medium"
         >
           <ShoppingCart className="w-5 h-5" />
-          {cartCount} · {cartTotal.toFixed(2)} EGP
+          {cartCount} · {cartTotal.toFixed(2)} SAR
         </button>
       )}
 
@@ -400,7 +413,7 @@ export default function MenuCart({ products, customerName, customerType, custome
                         <img src={item.product.image_url} alt={item.product.name} className="w-14 h-14 rounded-lg object-cover shrink-0" />
                         <div className="flex-1 min-w-0">
                           <h4 className="font-medium text-gray-900 text-sm truncate">{item.product.name}</h4>
-                          <p className="text-xs text-gray-500">{price} EGP / {item.product.unit}</p>
+                          <p className="text-xs text-gray-500">{price} SAR / {item.product.unit}</p>
                           <p className="text-sm font-semibold text-emerald-600 mt-0.5">{(price * item.qty).toFixed(2)} EGP</p>
                         </div>
                         <div className="flex items-center gap-1.5 bg-white rounded-lg p-1 shadow-sm">
@@ -467,7 +480,7 @@ export default function MenuCart({ products, customerName, customerType, custome
                 })}
                 <div className="border-t border-gray-200 pt-2 flex items-center justify-between">
                   <span className="font-semibold text-gray-900">Total</span>
-                  <span className="font-bold text-emerald-600 text-lg">{cartTotal.toFixed(2)} EGP</span>
+                  <span className="font-bold text-emerald-600 text-lg">{cartTotal.toFixed(2)} SAR</span>
                 </div>
               </div>
 
