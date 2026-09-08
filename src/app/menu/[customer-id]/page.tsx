@@ -1,4 +1,5 @@
-import { getProducts, getMenuPageBySlug } from '@/lib/data';
+import { getMenuPageBySlug } from '@/lib/data';
+import { fetchSallaCatalog, type SallaCatalogProduct } from '@/lib/salla';
 import { CustomerType } from '@/lib/types';
 import MenuCart from '@/components/MenuCart';
 
@@ -24,12 +25,33 @@ export default async function CustomerMenuPage({ params }: PageProps) {
     );
   }
 
-  const products = await getProducts();
+  let products: SallaCatalogProduct[] = [];
+  let catalogError: string | null = null;
+  try {
+    products = await fetchSallaCatalog();
+  } catch (error) {
+    products = [];
+    catalogError = error instanceof Error && error.message === 'SALLA_NOT_CONNECTED'
+      ? 'The Salla store is not connected yet.'
+      : 'The Salla catalog is temporarily unavailable. Please try again shortly.';
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white">
       <MenuCart
-        products={products}
+        products={products.map((product) => ({
+          id: product.id,
+          name: product.name,
+          name_ar: product.nameAr,
+          category: product.category,
+          unit: product.unit,
+          retail_price: product.price,
+          shop_price: product.price,
+          wholesale_price: product.price,
+          stock: product.stock,
+          image_url: product.imageUrl,
+        }))}
+        catalogError={catalogError}
         customerName={menuPage.customer_name}
         customerType={menuPage.customer_type as CustomerType}
         customerId={menuPage.id}

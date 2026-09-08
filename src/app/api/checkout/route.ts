@@ -1,8 +1,10 @@
+import crypto from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { isDbActive } from '@/lib/data';
 import { sendWhatsApp } from '@/lib/whatsapp';
 import { pushOrderToSalla } from '@/lib/salla-sync';
+import { createSallaOrder, fetchSallaCatalog } from '@/lib/salla';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +26,7 @@ interface CheckoutBody {
   location?: string;
   paymentMethod?: string;
   customerConfirmed?: boolean;
+  checkoutMode?: 'salla' | 'in_app';
 }
 
 export async function POST(req: Request) {
@@ -40,6 +43,29 @@ export async function POST(req: Request) {
   }
   if (!body.customerConfirmed) {
     return NextResponse.json({ error: 'Please confirm that all order details are correct' }, { status: 400 });
+  }
+
+  if (body.checkoutMode === 'salla') {
+    try {
+      const catalog = await fetchSallaCatalog();
+      const catalogById = new Map(catalog.map((product) => [product.id, product]));
+      const verifiedItems = body.items.map((item) => {
+        const product = catalogById.get(String(item.product_id));
+        const quantity = Number(item.qty);
+        if (!product || !product.purchasable || !Number.isFinite(quantity) || quantity <= 0 || quantity > product.stock) {
+          throw new Error(`Product unavailable or quantity exceeds stock: ${item.product_name}`);
+        }
+        return { id: product.id, quantity, price: product.price, name: product.name };
+      });
+      const verifiedTotal = verifiedItems.reduce((sum, item) => sum + item.quantity * item.price, 0);
+      const referenceId = `WEB-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+      const result = await createSallaOrder({ referenceId, customerName: body.customerName.trim(), phone: body.phone.trim(), address: body.location.trim(), items: verifiedItems });
+      const data = (result.data ?? result) as { id?: string | number; checkout_url?: string; url?: string };
+      const checkoutUrl = data.checkout_url ?? data.url;
+      return NextResponse.json({ success: true, orderId: String(data.id ?? referenceId), sallaOrderId: String(data.id ?? ''), checkoutUrl, total: verifiedTotal, hostedCheckout: Boolean(checkoutUrl) });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'Salla checkout failed' }, { status: 502 });
+    }
   }
 
   const dbActive = await isDbActive();

@@ -60,6 +60,72 @@ export function sallaApiUrl(path: string) {
   return new URL(path, API_URL).toString();
 }
 
+function catalogAmount(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'string') return Number(value.replace(/[ ,]/g, '')) || 0;
+  if (value && typeof value === 'object') return catalogAmount((value as Record<string, unknown>).amount);
+  return 0;
+}
+
+export interface SallaCatalogProduct {
+  id: string;
+  name: string;
+  nameAr: string;
+  category: 'vegetables' | 'fruits' | 'herbs';
+  unit: string;
+  price: number;
+  stock: number;
+  imageUrl: string;
+  purchasable: boolean;
+}
+
+function catalogCategory(item: Record<string, any>): SallaCatalogProduct['category'] {
+  const text = JSON.stringify(item.categories ?? item.category ?? '').toLowerCase();
+  if (text.includes('fruit') || text.includes('فاكه')) return 'fruits';
+  if (text.includes('herb') || text.includes('عشب')) return 'herbs';
+  return 'vegetables';
+}
+
+export function normalizeSallaProduct(item: Record<string, any>): SallaCatalogProduct {
+  const quantity = Number(item.quantity ?? item.stock ?? item.inventory_quantity ?? 0);
+  const price = catalogAmount(item.price ?? item.sale_price ?? item.regular_price);
+  const name = String(item.name ?? item.title ?? 'Product');
+  return {
+    id: String(item.id ?? item.product_id),
+    name,
+    nameAr: String(item.name_ar ?? item.arabic_name ?? name),
+    category: catalogCategory(item),
+    unit: String(item.unit ?? item.measurement_unit ?? 'item'),
+    price,
+    stock: Number.isFinite(quantity) ? Math.max(0, quantity) : 0,
+    imageUrl: String(item.image?.url ?? item.main_image ?? item.thumbnail ?? item.images?.[0]?.url ?? ''),
+    purchasable: quantity > 0 && item.status !== 'out' && item.status !== 'draft',
+  };
+}
+
+export async function fetchSallaCatalog() {
+  const products: SallaCatalogProduct[] = [];
+  for (let page = 1; page <= 100; page += 1) {
+    const result = await sallaFetch<{ data?: Record<string, any>[] }>(`/admin/v2/products?page=${page}&per_page=100`);
+    const pageItems = result.data ?? [];
+    products.push(...pageItems.map(normalizeSallaProduct).filter((product) => product.id && product.price >= 0));
+    if (pageItems.length < 100) break;
+  }
+  return products;
+}
+
+export async function createSallaOrder(input: { referenceId: string; customerName: string; phone: string; address: string; items: Array<{ id: string; quantity: number; price: number; name: string }> }) {
+  return sallaFetch<{ data?: { id?: string | number; checkout_url?: string; url?: string }; checkout_url?: string }>('/admin/v2/orders', {
+    method: 'POST',
+    body: JSON.stringify({
+      reference_id: input.referenceId,
+      customer: { name: input.customerName, mobile: input.phone },
+      shipping: { address: input.address },
+      items: input.items.map((item) => ({ product_id: item.id, quantity: item.quantity, price: item.price, name: item.name })),
+    }),
+  });
+}
+
 export async function fetchSallaStoreInfo(accessToken: string) {
   const response = await fetchWithRetry(sallaApiUrl('/admin/v2/store/info'), {
     headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
