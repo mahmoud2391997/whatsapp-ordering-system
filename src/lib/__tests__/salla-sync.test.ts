@@ -95,13 +95,18 @@ describe('pushOrderToSalla', () => {
 
   it('pushes order via API and marks synced', async () => {
     mocks.getSallaAuthorization.mockResolvedValue(auth);
-    mocks.order.findUnique.mockResolvedValue({ id: 'ORD-123', customerName: 'Ali', customerPhone: '9665', customerType: 'retail', total: 50, location: 'Riyadh', orderItems: [{ productName: 'Tomato', qty: 2, unit: 'kg', unitPrice: 25 }] });
+    mocks.order.findUnique.mockResolvedValue({ id: 'ORD-123', customerName: 'Ali', customerPhone: '9665', customerType: 'retail', total: 50, location: 'Riyadh', orderItems: [{ productName: 'Tomato', qty: 2, unit: 'kg', unitPrice: 25, product: { sallaProductId: '9001' } }] });
     mocks.sallaFetch.mockResolvedValue({ data: { id: 3000 } });
     mocks.order.update.mockResolvedValue({});
     const result = await pushOrderToSalla('ORD-123');
     const [path, init] = mocks.sallaFetch.mock.calls[0];
     expect(path).toBe('/admin/v2/orders');
-    expect(JSON.parse(init.body)).toEqual(expect.objectContaining({ reference_id: 'ORD-123', total: 50 }));
+    expect(JSON.parse(init.body)).toEqual(expect.objectContaining({
+      reference_id: 'ORD-123',
+      total: 50,
+      shipping: { address: 'Riyadh' },
+      items: [expect.objectContaining({ product_id: '9001', name: 'Tomato', quantity: 2, price: 25 })],
+    }));
     expect(mocks.order.update).toHaveBeenCalledWith(expect.objectContaining({
       data: { sallaOrderId: '3000', sallaSyncStatus: 'synced', sallaSyncedAt: expect.any(Date), sallaSyncError: null },
     }));

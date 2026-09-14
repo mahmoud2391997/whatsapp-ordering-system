@@ -274,9 +274,20 @@ export async function pushCatalogToSalla() {
 export async function pushOrderToSalla(orderId: string) {
   const auth = await getSallaAuthorization();
   if (!auth) throw new Error('SALLA_NOT_CONNECTED');
-  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { orderItems: true } });
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { orderItems: { include: { product: true } } } });
   if (!order) throw new Error('ORDER_NOT_FOUND');
-  const result = await sallaFetch('/admin/v2/orders', { method: 'POST', body: JSON.stringify({ reference_id: order.id, total: Number(order.total), customer: { name: order.customerName, mobile: order.customerPhone }, items: order.orderItems.map((item) => ({ name: item.productName, quantity: Number(item.qty), price: Number(item.unitPrice) })) }) }, auth);
+  const result = await sallaFetch('/admin/v2/orders', { method: 'POST', body: JSON.stringify({
+    reference_id: order.id,
+    total: Number(order.total),
+    customer: { name: order.customerName, mobile: order.customerPhone },
+    shipping: order.location ? { address: order.location } : undefined,
+    items: order.orderItems.map((item) => ({
+      product_id: item.product?.sallaProductId || undefined,
+      name: item.productName,
+      quantity: Number(item.qty),
+      price: Number(item.unitPrice),
+    })),
+  }) }, auth);
   const remoteId = String((result as any)?.data?.id ?? (result as any)?.id ?? '');
   await prisma.order.update({ where: { id: order.id }, data: { sallaOrderId: remoteId || undefined, sallaSyncStatus: 'synced', sallaSyncError: null, sallaSyncedAt: new Date() } });
   return result;

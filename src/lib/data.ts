@@ -121,15 +121,19 @@ export async function getMenuPages(): Promise<MenuPage[]> {
 }
 
 export async function getMenuPageBySlug(slug: string): Promise<MenuPage | null> {
-  if (!(await isDbActive())) {
-    return DUMMY_MENU_PAGES.find(p => p.slug === slug) ?? null;
-  }
+  const dummy = () => DUMMY_MENU_PAGES.find(p => p.slug === slug || p.id === slug) ?? null;
+  if (!(await isDbActive())) return dummy();
   try {
-    const page = await prisma.menuPage.findUnique({ where: { slug } });
+    const page = await prisma.menuPage.findUnique({ where: { slug } })
+      ?? (isUuidLike(slug) ? await prisma.menuPage.findUnique({ where: { id: slug } }) : null);
     return page ? mapMenuPage(page) : null;
   } catch {
-    return DUMMY_MENU_PAGES.find(p => p.slug === slug) ?? null;
+    return dummy();
   }
+}
+
+function isUuidLike(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 export interface DashboardData {

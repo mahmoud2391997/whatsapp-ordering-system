@@ -1,10 +1,9 @@
-import crypto from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { isDbActive } from '@/lib/data';
 import { sendWhatsApp } from '@/lib/whatsapp';
 import { pushOrderToSalla } from '@/lib/salla-sync';
-import { createSallaOrder, fetchSallaCatalog } from '@/lib/salla';
+import { isUuid } from '@/lib/catalog-order';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +25,6 @@ interface CheckoutBody {
   location?: string;
   paymentMethod?: string;
   customerConfirmed?: boolean;
-  checkoutMode?: 'salla' | 'in_app';
 }
 
 export async function POST(req: Request) {
@@ -45,29 +43,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Please confirm that all order details are correct' }, { status: 400 });
   }
 
-  if (body.checkoutMode === 'salla') {
-    try {
-      const catalog = await fetchSallaCatalog();
-      const catalogById = new Map(catalog.map((product) => [product.id, product]));
-      const verifiedItems = body.items.map((item) => {
-        const product = catalogById.get(String(item.product_id));
-        const quantity = Number(item.qty);
-        if (!product || !product.purchasable || !Number.isFinite(quantity) || quantity <= 0 || quantity > product.stock) {
-          throw new Error(`Product unavailable or quantity exceeds stock: ${item.product_name}`);
-        }
-        return { id: product.id, quantity, price: product.price, name: product.name };
-      });
-      const verifiedTotal = verifiedItems.reduce((sum, item) => sum + item.quantity * item.price, 0);
-      const referenceId = `WEB-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-      const result = await createSallaOrder({ referenceId, customerName: body.customerName.trim(), phone: body.phone.trim(), address: body.location.trim(), items: verifiedItems });
-      const data = (result.data ?? result) as { id?: string | number; checkout_url?: string; url?: string };
-      const checkoutUrl = data.checkout_url ?? data.url;
-      return NextResponse.json({ success: true, orderId: String(data.id ?? referenceId), sallaOrderId: String(data.id ?? ''), checkoutUrl, total: verifiedTotal, hostedCheckout: Boolean(checkoutUrl) });
-    } catch (error) {
-      return NextResponse.json({ error: error instanceof Error ? error.message : 'Salla checkout failed' }, { status: 502 });
-    }
-  }
-
   const dbActive = await isDbActive();
 
   // In demo mode (DB down) we cannot validate menu pages or persist the order,
@@ -78,7 +53,7 @@ export async function POST(req: Request) {
 
   let menuPageId: string | null = null;
   if (body.customerId) {
-    const menuPage = await prisma.menuPage.findUnique({ where: { id: body.customerId } });
+    const menuPage = await findMenuPage(body.customerId);
     if (!menuPage) {
       return NextResponse.json({ error: 'Menu page not found for this customer ID' }, { status: 404 });
     }
@@ -109,16 +84,15 @@ export async function POST(req: Request) {
     },
   });
 
-  await prisma.orderItem.createMany({
-    data: body.items.map(item => ({
-      orderId,
-      productId: item.product_id,
-      productName: item.product_name,
-      qty: item.qty,
-      unit: item.unit,
-      unitPrice: item.unit_price,
-    })),
-  });
+  const resolvedItems = await Promise.all(body.items.map(async (item) => ({
+    orderId,
+    productId: await resolveLocalProductId(item.product_id),
+    productName: item.product_name,
+    qty: item.qty,
+    unit: item.unit,
+    unitPrice: item.unit_price,
+  })));
+  await prisma.orderItem.createMany({ data: resolvedItems });
 
   const existingCustomer = await prisma.customer.findUnique({ where: { phone: body.phone } });
   if (!existingCustomer) {
@@ -170,9 +144,13 @@ export async function POST(req: Request) {
     data: { conversationId, sender: 'bot', text: orderMessage, time: now, type: 'order' },
   });
 
-  void pushOrderToSalla(orderId).catch(async (error) => {
+  let sallaSyncStatus = 'synced';
+  try {
+    await pushOrderToSalla(orderId);
+  } catch (error) {
+    sallaSyncStatus = 'failed';
     await prisma.order.update({ where: { id: orderId }, data: { sallaSyncStatus: 'failed', sallaSyncError: error instanceof Error ? error.message : 'Salla push failed' } }).catch(() => undefined);
-  });
+  }
 
   let whatsappSent = false;
   try {
@@ -217,9 +195,26 @@ export async function POST(req: Request) {
     orderId,
     conversationId,
     whatsappSent,
+    sallaSyncStatus,
     whatsappLink: `https://wa.me/${body.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(orderMessage)}`,
     paymentSession,
   });
+}
+
+async function findMenuPage(customerId: string) {
+  if (isUuid(customerId)) {
+    const byId = await prisma.menuPage.findUnique({ where: { id: customerId } });
+    if (byId) return byId;
+  }
+  return prisma.menuPage.findUnique({ where: { slug: customerId } });
+}
+
+async function resolveLocalProductId(productId: string) {
+  const bySalla = await prisma.product.findUnique({ where: { sallaProductId: productId } }).catch(() => null);
+  if (bySalla) return bySalla.id;
+  if (!isUuid(productId)) return null;
+  const byId = await prisma.product.findUnique({ where: { id: productId } }).catch(() => null);
+  return byId?.id ?? null;
 }
 
 function simulateCheckout(body: CheckoutBody) {

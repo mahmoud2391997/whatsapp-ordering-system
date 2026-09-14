@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { encryptToken, decryptToken, verifySallaWebhook, createOAuthState, sallaInstallUrl, sallaRedirectUri, sallaApiUrl, safeEqual } from '@/lib/salla';
+import { encryptToken, decryptToken, verifySallaWebhook, createOAuthState, sallaInstallUrl, sallaRedirectUri, sallaApiUrl, safeEqual, isSallaDemoStorefront, pickLiveSallaStorefrontUrl, toLiveSallaStorefront } from '@/lib/salla';
 
 const SECRET = 'test-encryption-key-0123456789abcdef';
 const WEBHOOK_SECRET = 'test-webhook-secret';
@@ -94,5 +94,32 @@ describe('URL builders', () => {
   it('api url joins paths onto SALLA_API_URL', () => {
     process.env.SALLA_API_URL = 'https://api.salla.dev';
     expect(sallaApiUrl('/admin/v2/store/info')).toBe('https://api.salla.dev/admin/v2/store/info');
+  });
+});
+
+describe('live storefront URL', () => {
+  it('rejects Salla demo storefronts but keeps the live salla.sa store path', () => {
+    expect(isSallaDemoStorefront('https://demostore.salla.sa/dev-zqa5tgqmcghatesc')).toBe(true);
+    expect(isSallaDemoStorefront('https://salla.sa/dev-zqa5tgqmcghatesc')).toBe(false);
+    expect(isSallaDemoStorefront('https://fresh-greens.salla.sa')).toBe(false);
+  });
+
+  it('converts a demo preview link into the live salla.sa store', () => {
+    expect(toLiveSallaStorefront('https://demostore.salla.sa/dev-zqa5tgqmcghatesc')).toBe('https://salla.sa/dev-zqa5tgqmcghatesc');
+    expect(toLiveSallaStorefront('https://salla.sa/dev-zqa5tgqmcghatesc/products/1')).toBe('https://salla.sa/dev-zqa5tgqmcghatesc');
+  });
+
+  it('picks a live domain and ignores leftover demo hosts', () => {
+    expect(pickLiveSallaStorefrontUrl(
+      ['https://demostore.salla.sa/dev-abc', 'https://my-live-store.salla.sa/ar/p123'],
+      'https://demostore.salla.sa/dev-abc',
+    )).toBe('https://salla.sa/dev-abc');
+  });
+
+  it('uses a live env URL when the API only returns demo', () => {
+    expect(pickLiveSallaStorefrontUrl(
+      ['https://demostore.salla.sa/dev-abc'],
+      'https://greens.salla.sa',
+    )).toBe('https://salla.sa/dev-abc');
   });
 });

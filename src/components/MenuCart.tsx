@@ -18,6 +18,7 @@ interface CartItem {
 interface MenuCartProps {
   products: Product[];
   customerName: string;
+  customerPhone?: string;
   customerType: CustomerType;
   customerId: string;
   catalogError?: string | null;
@@ -29,16 +30,15 @@ const categoryLabels: Record<string, { label: string; labelAr: string; color: st
   herbs:      { label: 'Herbs',      labelAr: 'الأعشاب',  color: 'bg-teal-100 text-teal-800' },
 };
 
-export default function MenuCart({ products, customerName, customerType, customerId, catalogError }: MenuCartProps) {
+export default function MenuCart({ products, customerName, customerPhone = '', customerType, customerId, catalogError }: MenuCartProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [name, setName] = useState(customerName);
+  const [phone, setPhone] = useState(customerPhone);
   const [location, setLocation] = useState('');
   const [customerConfirmed, setCustomerConfirmed] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod');
-  const [checkoutMode, setCheckoutMode] = useState<'salla' | 'in_app'>('in_app');
   const [submitting, setSubmitting] = useState(false);
   const [orderResult, setOrderResult] = useState<{ orderId: string; whatsappLink: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -89,24 +89,6 @@ export default function MenuCart({ products, customerName, customerType, custome
     setError(null);
 
     try {
-      if (checkoutMode === 'salla') {
-        const res = await fetch('/api/checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ customerId, customerName: name, phone, items: cart.map(i => ({ product_id: i.product.id, product_name: i.product.name, qty: i.qty, unit: i.product.unit, unit_price: Number(i.product[priceKey]) })), total: cartTotal, customerType: 'retail', location, paymentMethod, customerConfirmed, checkoutMode }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? 'Salla checkout failed');
-        if (data.checkoutUrl) {
-          window.open(data.checkoutUrl, '_blank', 'noopener,noreferrer');
-        } else {
-          setOrderResult({ orderId: data.orderId, whatsappLink: '' });
-        }
-        setCart([]);
-        setCheckoutOpen(false);
-        return;
-      }
-
       // For online payment methods, create order first then initiate payment
       if (paymentMethod === 'geidea' || paymentMethod === 'tamara' || paymentMethod === 'online') {
         // Step 1: Create the order in the database via checkout API
@@ -129,7 +111,6 @@ export default function MenuCart({ products, customerName, customerType, custome
             location: location || undefined,
             paymentMethod,
             customerConfirmed,
-            checkoutMode,
           }),
         });
 
@@ -272,7 +253,7 @@ export default function MenuCart({ products, customerName, customerType, custome
             Farm-Fresh Vegetables<br />& Fruits
           </h1>
           <p className="text-emerald-100 text-lg mb-2 max-w-xl mx-auto">
-            Add items to your cart and checkout — your order goes straight to WhatsApp.
+            Prices and stock come from the connected Salla store. Type your order on WhatsApp or checkout here.
           </p>
           <p className="text-white/70 text-base">خضروات وفواكه طازجة من المزرعة مباشرة</p>
         </div>
@@ -508,21 +489,6 @@ export default function MenuCart({ products, customerName, customerType, custome
                   placeholder="e.g. Nasr City, Cairo — Street name, building"
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                 />
-              </div>
-
-              {/* Salla checkout mode */}
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Order destination</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setCheckoutMode('in_app')} className={`p-3 rounded-xl border-2 text-left transition-all ${checkoutMode === 'in_app' ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200'}`}>
-                    <span className="block text-sm font-semibold">In-app order</span>
-                    <span className="block text-xs text-gray-500 mt-1">Submit directly to Salla</span>
-                  </button>
-                  <button type="button" onClick={() => setCheckoutMode('salla')} className={`p-3 rounded-xl border-2 text-left transition-all ${checkoutMode === 'salla' ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200'}`}>
-                    <span className="block text-sm font-semibold">Salla checkout</span>
-                    <span className="block text-xs text-gray-500 mt-1">Open hosted payment</span>
-                  </button>
-                </div>
               </div>
 
               {/* Payment method */}

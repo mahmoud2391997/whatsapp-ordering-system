@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   db: { isDbActive: vi.fn() },
   prisma: {
     menuPage: { findUnique: vi.fn() },
+    product: { findUnique: vi.fn() },
     order: { create: vi.fn(), update: vi.fn() },
     orderItem: { createMany: vi.fn() },
     customer: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
@@ -53,6 +54,7 @@ beforeEach(() => {
   mocks.pushOrderToSalla.mockResolvedValue(null);
   mocks.db.isDbActive.mockResolvedValue(true);
   mocks.prisma.menuPage.findUnique.mockResolvedValue({ id: 'menu-1' });
+  mocks.prisma.product.findUnique.mockResolvedValue(null);
   mocks.prisma.order.create.mockResolvedValue({ id: 'ORD-000000' });
   mocks.prisma.customer.findUnique.mockResolvedValue(null);
   mocks.prisma.conversation.findFirst.mockResolvedValue(null);

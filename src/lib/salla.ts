@@ -60,6 +60,80 @@ export function sallaApiUrl(path: string) {
   return new URL(path, API_URL).toString();
 }
 
+export function isSallaDemoStorefront(url: string) {
+  try {
+    const host = new URL(url.startsWith('http') ? url : `https://${url}`).hostname.toLowerCase().replace(/^www\./, '');
+    return host === 'demostore.salla.sa' || host.endsWith('.demostore.salla.sa');
+  } catch {
+    return true;
+  }
+}
+
+export function storefrontOrigin(url: string) {
+  try {
+    const parsed = new URL(url.startsWith('http') ? url : `https://${url}`);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+    if (host === 'salla.sa') {
+      const slug = parsed.pathname.split('/').filter((part) => part && part !== 'en' && part !== 'ar')[0];
+      return slug ? `https://salla.sa/${slug}` : null;
+    }
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+export function liveStorefrontFromDemo(url: string) {
+  try {
+    const parsed = new URL(url.startsWith('http') ? url : `https://${url}`);
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+    if (host !== 'demostore.salla.sa' && !host.endsWith('.demostore.salla.sa')) return null;
+    const slug = parsed.pathname.split('/').filter((part) => part && part !== 'en' && part !== 'ar')[0];
+    return slug ? `https://salla.sa/${slug}` : null;
+  } catch {
+    return null;
+  }
+}
+
+export function toLiveSallaStorefront(url: string) {
+  return liveStorefrontFromDemo(url) ?? (isSallaDemoStorefront(url) ? null : storefrontOrigin(url));
+}
+
+export function pickLiveSallaStorefrontUrl(candidates: Array<string | null | undefined>, envUrl = process.env.NEXT_PUBLIC_SALLA_STOREFRONT_URL ?? process.env.SALLA_STOREFRONT_URL) {
+  const origins = [...candidates, envUrl]
+    .filter((value): value is string => Boolean(value))
+    .map(toLiveSallaStorefront)
+    .filter((url): url is string => Boolean(url));
+  return origins[0] ?? null;
+}
+
+function collectStorefrontCandidates(data: Record<string, any> | undefined) {
+  if (!data) return [];
+  const username = data.username ? String(data.username).replace(/^https?:\/\//, '').replace(/\/$/, '') : '';
+  const fromUsername = username ? (username.includes('.') ? `https://${username}` : `https://${username}.salla.sa`) : null;
+  const domain = data.domain ? String(data.domain) : null;
+  return [data.url, data.store_url, data.domain_url, data.links?.customer, fromUsername, domain];
+}
+
+export async function resolveSallaStorefrontUrl() {
+  const candidates: Array<string | null | undefined> = [];
+  try {
+    const info = await sallaFetch<{ data?: Record<string, any> }>('/admin/v2/store/info');
+    candidates.push(...collectStorefrontCandidates(info.data));
+  } catch {
+    /* store info is optional when a live env URL exists */
+  }
+  try {
+    const products = await sallaFetch<{ data?: Array<Record<string, any>> }>('/admin/v2/products?page=1&per_page=1');
+    const first = products.data?.[0];
+    candidates.push(first?.urls?.customer, first?.url);
+  } catch {
+    /* product URLs are a fallback source for the public domain */
+  }
+  return pickLiveSallaStorefrontUrl(candidates);
+}
+
 function catalogAmount(value: unknown): number {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
   if (typeof value === 'string') return Number(value.replace(/[ ,]/g, '')) || 0;
@@ -112,6 +186,35 @@ export async function fetchSallaCatalog() {
     if (pageItems.length < 100) break;
   }
   return products;
+}
+
+export function toMenuCartProducts(products: SallaCatalogProduct[]) {
+  return products.map((product) => ({
+    id: product.id,
+    name: product.name,
+    name_ar: product.nameAr,
+    category: product.category,
+    unit: product.unit,
+    retail_price: product.price,
+    shop_price: product.price,
+    wholesale_price: product.price,
+    stock: product.stock,
+    image_url: product.imageUrl,
+  }));
+}
+
+export async function loadSallaMenuCatalog() {
+  try {
+    const products = await fetchSallaCatalog();
+    return { products: toMenuCartProducts(products), catalogError: null as string | null };
+  } catch (error) {
+    return {
+      products: toMenuCartProducts([]),
+      catalogError: error instanceof Error && error.message === 'SALLA_NOT_CONNECTED'
+        ? 'The Salla store is not connected yet.'
+        : 'The Salla catalog is temporarily unavailable. Please try again shortly.',
+    };
+  }
 }
 
 export async function createSallaOrder(input: { referenceId: string; customerName: string; phone: string; address: string; items: Array<{ id: string; quantity: number; price: number; name: string }> }) {
@@ -196,15 +299,30 @@ export async function getSallaAccessToken(auth: NonNullable<Awaited<ReturnType<t
 }
 
 export async function sallaFetch<T>(path: string, init: RequestInit = {}, auth?: NonNullable<Awaited<ReturnType<typeof getSallaAuthorization>>>) {
-  const authorization = auth ?? await getSallaAuthorization();
-  if (!authorization) throw new Error('SALLA_NOT_CONNECTED');
-  const token = await getSallaAccessToken(authorization);
+  let token: string | undefined;
+  try {
+    const authorization = auth ?? await getSallaAuthorization();
+    if (authorization) token = await getSallaAccessToken(authorization);
+  } catch {
+    token = undefined;
+  }
+  if (!token) token = process.env.SALLA_ACCESS_TOKEN;
+  if (!token) throw new Error('SALLA_NOT_CONNECTED');
   const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
   const headers: Record<string, string> = { accept: 'application/json', ...(init.headers as Record<string, string>) };
   if (init.body && !isFormData && !headers['content-type']) headers['content-type'] = 'application/json';
   const response = await fetchWithRetry(sallaApiUrl(path), { ...init, headers: { ...headers, authorization: `Bearer ${token}` }, cache: 'no-store' });
   if (!response.ok) throw new Error(`Salla API ${response.status}: ${await responseError(response)}`);
   return response.json() as Promise<T>;
+}
+
+export const SALLA_MAINTENANCE_SETTINGS_URL = 'https://s.salla.sa/channel/settings?legacy=0#maintenance-mode';
+
+export async function setSallaMaintenanceMode(enabled: boolean) {
+  return sallaFetch('/admin/v2/settings/fields/store.maintenance', {
+    method: 'PUT',
+    body: JSON.stringify({ value: enabled }),
+  });
 }
 
 const SALLA_WEBHOOK_EVENTS = ['product.created', 'product.updated', 'product.deleted', 'customer.created', 'customer.updated', 'order.status.update', 'app.uninstalled'];

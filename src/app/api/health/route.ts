@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { getSallaAuthorization } from '@/lib/salla';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +45,15 @@ export async function GET() {
     checks.product_count = { ok: false, error: String(err), latencyMs: Date.now() - productStart };
   }
 
-  const allOk = Object.values(checks).every(c => c.ok);
+  try {
+    const auth = await getSallaAuthorization();
+    checks.salla = { ok: Boolean(auth), error: auth ? undefined : 'Salla store is not connected' };
+  } catch (err) {
+    checks.salla = { ok: false, error: String(err) };
+  }
+
+  const required = Object.entries(checks).filter(([key]) => key !== 'salla');
+  const allOk = required.every(([, c]) => c.ok);
 
   return NextResponse.json(
     { status: allOk ? 'healthy' : 'degraded', checks, timestamp: new Date().toISOString() },

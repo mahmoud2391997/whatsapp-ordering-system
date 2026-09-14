@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { prisma } from '@/lib/db';
-import { findCustomerOrder, statusReply, normalizePhone } from '@/lib/orders';
-import { sendWhatsApp, nowTime } from '@/lib/whatsapp';
+import { sendWhatsApp } from '@/lib/whatsapp';
+import { handleWhatsAppText } from '@/lib/whatsapp-order';
+import { normalizePhone } from '@/lib/orders';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
   let payload: any;
   try { payload = JSON.parse(raw); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   const messages = payload?.entry?.flatMap((entry: any) => entry.changes?.flatMap((change: any) => change.value?.messages ?? []) ?? []) ?? [];
+  const contacts = payload?.entry?.flatMap((entry: any) => entry.changes?.flatMap((change: any) => change.value?.contacts ?? []) ?? []) ?? [];
   for (const message of messages) {
     const phone = normalizePhone(message.from ?? '');
     const text = extractText(message).trim();
@@ -47,14 +49,18 @@ export async function POST(req: Request) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') continue;
       throw error;
     }
-    const conversation = await prisma.conversation.findFirst({ where: { phone: { contains: phone } } });
-    const reply = /status|where|order|tracking|حالة|طلب|فين|أين/i.test(text)
-      ? await findCustomerOrder(text.match(/ORD[- ]?\d+/i)?.[0]?.replace(' ', '-'), phone).then(order => order ? statusReply(order) : 'We could not find an active order for this WhatsApp number. Please send your order reference, for example ORD-123456.')
-      : 'To check your order status, send “status” or your order reference (for example ORD-123456).';
-    if (conversation) await prisma.message.create({ data: { conversationId: conversation.id, sender: 'customer', text, time: nowTime(), type: 'whatsapp' } });
-    await sendWhatsApp(phone, reply);
-    if (conversation) await prisma.message.create({ data: { conversationId: conversation.id, sender: 'bot', text: reply, time: nowTime(), type: 'status_reply' } });
-    await prisma.webhookEvent.updateMany({ where: { source: 'whatsapp', eventType: 'message', eventKey: String(eventId) }, data: { processed: true } });
+    const profileName = contacts.find((contact: any) => normalizePhone(contact.wa_id ?? '') === phone)?.profile?.name;
+    try {
+      const { reply } = await handleWhatsAppText({ phone, text, name: profileName });
+      await sendWhatsApp(phone, reply);
+      await prisma.webhookEvent.updateMany({ where: { source: 'whatsapp', eventType: 'message', eventKey: String(eventId) }, data: { processed: true } });
+    } catch (error) {
+      await prisma.webhookEvent.updateMany({
+        where: { source: 'whatsapp', eventType: 'message', eventKey: String(eventId) },
+        data: { processed: false, error: error instanceof Error ? error.message : 'WhatsApp handler failed' },
+      });
+      throw error;
+    }
   }
   return NextResponse.json({ received: true });
 }

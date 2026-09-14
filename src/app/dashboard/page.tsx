@@ -101,9 +101,19 @@ export default function DashboardPage() {
   ];
 
   const goMenu = useCallback(() => {
-    const storefrontUrl = process.env.NEXT_PUBLIC_SALLA_STOREFRONT_URL;
-    const destination = storefrontUrl || '/menu';
-    window.open(destination, '_blank', 'noopener,noreferrer');
+    void (async () => {
+      try {
+        const res = await fetch('/api/salla/store-url');
+        const data = await res.json().catch(() => ({}));
+        if (typeof data.url === 'string' && data.url) {
+          window.open(data.url, '_blank', 'noopener,noreferrer');
+          return;
+        }
+      } catch {
+        /* /menu also redirects to the live Salla store */
+      }
+      window.location.assign('/menu');
+    })();
   }, []);
 
   if (loading) {
@@ -851,9 +861,23 @@ function IntegrationsSection() {
     setSyncing(action);
     setSyncResult(null);
     try {
-      const endpoint = action === 'retry' ? '/api/salla/retry' : `/api/salla/sync/${action}`;
-      const response = await fetch(endpoint, { method: 'POST' });
+      const endpoint = action === 'retry'
+        ? '/api/salla/retry'
+        : action === 'maintenance-off'
+          ? '/api/salla/maintenance'
+          : `/api/salla/sync/${action}`;
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: action === 'maintenance-off' ? { 'Content-Type': 'application/json' } : undefined,
+        body: action === 'maintenance-off' ? JSON.stringify({ enabled: false }) : undefined,
+      });
       const result = await response.json();
+      if (action === 'maintenance-off') {
+        setSyncResult(response.ok
+          ? 'Salla maintenance mode turned off. Open the live store to confirm.'
+          : `${result.error ?? 'Could not change maintenance mode'}. Open Salla settings to disable it manually.`);
+        return;
+      }
       setSyncResult(response.ok ? `${action} complete${result.succeeded !== undefined ? `: ${result.succeeded} succeeded, ${result.stillFailing} still failing` : result.pushed !== undefined ? `: ${result.pushed} pushed (${result.created} created, ${result.updated} updated)${result.errors?.length ? `, ${result.errors.length} failed` : ''}` : ''}` : result.error ?? 'Sync failed');
     } catch { setSyncResult('Sync failed'); } finally { setSyncing(null); }
   };
@@ -967,6 +991,8 @@ function IntegrationsSection() {
           </div>
           <div className="flex flex-wrap gap-2 mt-4">
             {['products', 'customers', 'orders', 'retry', 'push'].map((action) => <button key={action} onClick={() => runSallaAction(action)} disabled={syncing !== null} className="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 disabled:opacity-50">{syncing === action ? 'Working...' : action === 'retry' ? 'Retry failed syncs' : action === 'push' ? 'Push catalog' : `Sync ${action}`}</button>)}
+            <button onClick={() => runSallaAction('maintenance-off')} disabled={syncing !== null} className="px-3 py-2 rounded-lg bg-amber-50 text-amber-800 text-xs font-medium hover:bg-amber-100 disabled:opacity-50">{syncing === 'maintenance-off' ? 'Working...' : 'Turn off maintenance'}</button>
+            <a href="https://s.salla.sa/channel/settings?legacy=0#maintenance-mode" target="_blank" rel="noopener noreferrer" className="px-3 py-2 rounded-lg bg-gray-50 text-gray-700 text-xs font-medium hover:bg-gray-100">Open Salla maintenance settings</a>
           </div>
           {syncResult && <p className="text-xs text-gray-600 mt-3" role="status">{syncResult}</p>}
         </div>;

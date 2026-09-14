@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     let reply = '';
     if (/لنفسي|شخصي|فردي|retail|myself|personal/i.test(message)) {
       detectedType = 'retail';
-      reply = 'ممتاز! سعيد بخدمتك. أرسل لنا موقعك للتوصيل أو تصفح المنتجات من القائمة:\n📱 /menu';
+      reply = 'ممتاز! سعيد بخدمتك. أرسل لنا موقعك للتوصيل أو تصفح المنتجات من قائمة سلة:\n📱 /menu';
     } else if (/محل|متجر|دكان|shop|store/i.test(message)) {
       detectedType = 'shop';
       reply = 'رائع! ستحصل على أسعار الجملة الخاصة بالمحلات. أرسل لنا موقعك أو تصفح القائمة:\n📱 /menu';
@@ -261,7 +261,7 @@ function isLocationMessage(text: string): boolean {
 function parseOrderFromText(text: string, customerType: CustomerType): ParsedOrder | null {
   const items: ParsedOrder['items'] = [];
   const priceKey = customerType as 'retail' | 'shop' | 'restaurant';
-  const segments = text.split(/\s*(?:و|,|and|،)\s*/i);
+  const segments = text.split(/\s+(?:و|and)\s+|[,،]/i);
 
   for (const segment of segments) {
     const numMatch = segment.match(/(\d+)/);
