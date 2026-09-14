@@ -38,6 +38,17 @@ interface IntegrationData {
   recentLogs: Array<{ level: string; service: string; created_at: string }>;
 }
 
+interface SallaSetup {
+  links: { partnerPortal: string; merchantDashboard: string; maintenanceSettings: string; createAppDocs: string; oauthDocs: string };
+  pasteIntoSallaApp: { oauthMode: string; redirectUri: string; webhookUrl: string; scopes: string; storeEvents: string[] };
+  copyFromSallaApp: Array<{ env: string; from: string }>;
+  generateLocally: Array<{ env: string; from: string }>;
+  env: Record<string, boolean>;
+  secretsReady: boolean;
+  connected: { merchantId: string; storeName: string | null; status: string } | null;
+  nextSteps: string[];
+}
+
 type DashSection = 'overview' | 'orders' | 'conversations' | 'customers' | 'inventory' | 'integrations' | 'chatbot';
 
 const statusConfig: Record<OrderStatus, { label: string; color: string; icon: typeof Clock }> = {
@@ -856,6 +867,7 @@ function IntegrationsSection() {
   const [copied, setCopied] = useState<string | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [sallaSetup, setSallaSetup] = useState<SallaSetup | null>(null);
 
   const runSallaAction = async (action: string) => {
     setSyncing(action);
@@ -889,6 +901,8 @@ function IntegrationsSection() {
         if (!res.ok) throw new Error('Failed to fetch');
         const json = await res.json();
         setData(json);
+        const setupRes = await fetch('/api/salla/setup');
+        if (setupRes.ok) setSallaSetup(await setupRes.json());
       } catch { /* empty state */ } finally {
         setLoading(false);
       }
@@ -987,8 +1001,33 @@ function IntegrationsSection() {
               <p className="text-xs text-gray-500 mt-1">{salla?.configured ? 'Connected store synchronization' : 'Connect a Salla store to sync catalog and orders'}</p>
               {salla?.lastEvent && <p className="text-xs text-gray-400 mt-2">Last webhook: {new Date(salla.lastEvent).toLocaleString()}</p>}
             </div>
-            <a href="/api/salla/install" className="text-sm font-medium text-emerald-700 hover:underline">{salla?.configured ? 'Reconnect' : 'Connect to Salla'}</a>
+            <a href="/api/salla/install" className="text-sm font-medium text-emerald-700 hover:underline">{salla?.configured ? 'Reconnect live store' : 'Connect live Salla store'}</a>
           </div>
+          {sallaSetup && (
+            <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3">
+              <p className="text-xs font-semibold text-gray-800">Production setup</p>
+              <p className="text-xs text-gray-500">Use a live Salla merchant store plus a Partners app. Demo stores are not production.</p>
+              <div className="flex flex-wrap gap-2">
+                <a href={sallaSetup.links.partnerPortal} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-700 hover:underline">Partners portal</a>
+                <a href={sallaSetup.links.merchantDashboard} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-700 hover:underline">Merchant dashboard</a>
+                <a href={sallaSetup.links.createAppDocs} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-700 hover:underline">Create app docs</a>
+              </div>
+              {[{ label: 'Redirect URI', value: sallaSetup.pasteIntoSallaApp.redirectUri }, { label: 'Webhook URL', value: sallaSetup.pasteIntoSallaApp.webhookUrl }].map(item => (
+                <div key={item.label} className="flex items-center gap-2">
+                  <span className="text-[11px] text-gray-500 w-24 shrink-0">{item.label}</span>
+                  <code className="text-[11px] bg-white border border-gray-200 rounded px-2 py-1 flex-1 truncate">{item.value}</code>
+                  <button type="button" onClick={() => { navigator.clipboard.writeText(item.value); setCopied(item.label); setTimeout(() => setCopied(null), 1500); }} className="text-gray-400 hover:text-gray-700">{copied === item.label ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}</button>
+                </div>
+              ))}
+              <p className="text-[11px] text-gray-500">Copy from Salla: {sallaSetup.copyFromSallaApp.map(item => item.env).join(', ')}. Generate locally: SALLA_TOKEN_ENCRYPTION_KEY.</p>
+              {sallaSetup.nextSteps.length > 0 && (
+                <ol className="list-decimal list-inside text-xs text-gray-600 space-y-1">
+                  {sallaSetup.nextSteps.map(step => <li key={step}>{step}</li>)}
+                </ol>
+              )}
+              {sallaSetup.connected && <p className="text-xs text-emerald-700">Connected merchant {sallaSetup.connected.merchantId}{sallaSetup.connected.storeName ? ` · ${sallaSetup.connected.storeName}` : ''}</p>}
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 mt-4">
             {['products', 'customers', 'orders', 'retry', 'push'].map((action) => <button key={action} onClick={() => runSallaAction(action)} disabled={syncing !== null} className="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium hover:bg-emerald-100 disabled:opacity-50">{syncing === action ? 'Working...' : action === 'retry' ? 'Retry failed syncs' : action === 'push' ? 'Push catalog' : `Sync ${action}`}</button>)}
             <button onClick={() => runSallaAction('maintenance-off')} disabled={syncing !== null} className="px-3 py-2 rounded-lg bg-amber-50 text-amber-800 text-xs font-medium hover:bg-amber-100 disabled:opacity-50">{syncing === 'maintenance-off' ? 'Working...' : 'Turn off maintenance'}</button>

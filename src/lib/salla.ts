@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
+import { sallaRequestedScopes, SALLA_SUBSCRIBE_EVENTS } from '@/lib/salla-config';
 
 const API_URL = process.env.SALLA_API_URL ?? 'https://api.salla.dev';
 const TOKEN_URL = process.env.SALLA_TOKEN_URL ?? 'https://accounts.salla.sa/oauth2/token';
@@ -252,7 +253,7 @@ export function sallaInstallUrl(state: string) {
     client_id: process.env.SALLA_CLIENT_ID ?? '',
     redirect_uri: sallaRedirectUri(),
     response_type: 'code',
-    scope: process.env.SALLA_SCOPES ?? '*',
+    scope: sallaRequestedScopes(),
     state,
   });
   return `https://accounts.salla.sa/oauth2/auth?${params}`;
@@ -325,7 +326,7 @@ export async function setSallaMaintenanceMode(enabled: boolean) {
   });
 }
 
-const SALLA_WEBHOOK_EVENTS = ['product.created', 'product.updated', 'product.deleted', 'customer.created', 'customer.updated', 'order.status.update', 'app.uninstalled'];
+const SALLA_WEBHOOK_EVENTS = SALLA_SUBSCRIBE_EVENTS;
 
 export async function registerSallaWebhooks(auth: NonNullable<Awaited<ReturnType<typeof getSallaAuthorization>>>) {
   const webhookUrl = process.env.SALLA_WEBHOOK_URL;
