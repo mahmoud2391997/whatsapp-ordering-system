@@ -156,8 +156,8 @@ export interface SallaCatalogProduct {
 
 function catalogCategory(item: Record<string, any>): SallaCatalogProduct['category'] {
   const text = JSON.stringify(item.categories ?? item.category ?? '').toLowerCase();
-  if (text.includes('fruit') || text.includes('فاكه')) return 'fruits';
-  if (text.includes('herb') || text.includes('عشب')) return 'herbs';
+  if (text.includes('plumb') || text.includes('سباك')) return 'fruits';
+  if (text.includes('hvac') || text.includes('air') || text.includes('تكييف')) return 'herbs';
   return 'vegetables';
 }
 

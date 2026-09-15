@@ -6,7 +6,7 @@ import {
   TrendingUp, Truck, Clock, CheckCircle2, XCircle, ChevronRight,
   Leaf, Bell, Search, Menu, X, AlertCircle, ExternalLink,
   Plug, Copy, Check, Activity, CreditCard, Wallet,
-  UserPlus, Loader2, Link2, Plus,
+  UserPlus, Loader2, Link2, Plus, Wrench, ClipboardList, CalendarDays, Zap, Droplets, Fan, Home,
 } from 'lucide-react';
 import Link from 'next/link';
 import WhatsAppChat from '@/components/WhatsAppChat';
@@ -103,10 +103,10 @@ export default function DashboardPage() {
 
   const navItems: { id: DashSection; label: string; icon: typeof LayoutDashboard }[] = [
     { id: 'overview',       label: 'Overview',       icon: LayoutDashboard },
-    { id: 'orders',         label: 'Orders',         icon: ShoppingBag },
+    { id: 'orders',         label: 'Service Requests', icon: Wrench },
     { id: 'conversations',  label: 'WhatsApp Chats', icon: MessageSquare },
     { id: 'customers',      label: 'Customers',      icon: Users },
-    { id: 'inventory',      label: 'Inventory',      icon: Package },
+    { id: 'inventory',      label: 'Services',       icon: ClipboardList },
     { id: 'integrations',   label: 'Integrations',   icon: Plug },
     { id: 'chatbot',        label: 'AI Bot Test',     icon: MessageSquare },
   ];
@@ -132,7 +132,7 @@ export default function DashboardPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-gray-400 flex items-center gap-2">
           <Leaf className="w-5 h-5 animate-pulse" />
-          Loading Fresh Greens dashboard...
+          Loading HomeCare Pro dashboard...
         </div>
       </div>
     );
@@ -150,7 +150,7 @@ export default function DashboardPage() {
             <Leaf className="w-4 h-4 text-white" />
           </div>
           <div>
-            <p className="text-white font-bold text-sm leading-tight">Fresh Greens</p>
+            <p className="text-white font-bold text-sm leading-tight">HomeCare Pro</p>
             <p className="text-emerald-400 text-xs">Admin Dashboard</p>
           </div>
           <button className="ml-auto lg:hidden text-emerald-400 hover:text-white" onClick={() => setSidebarOpen(false)}>
@@ -179,7 +179,7 @@ export default function DashboardPage() {
             className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-emerald-300 hover:bg-emerald-800 hover:text-white transition-colors"
           >
             <ExternalLink className="w-4 h-4 shrink-0" />
-            View Menu Page
+            View Service Catalog Page
           </Link>
         </div>
       </aside>
@@ -313,14 +313,14 @@ function OverviewSection({
 
         <div className="space-y-4">
           <div className="bg-gradient-to-br from-emerald-600 to-emerald-500 rounded-xl p-5 text-white">
-            <h3 className="font-semibold text-sm mb-1">Public Menu Page</h3>
-            <p className="text-emerald-100 text-xs mb-4">Share with customers to browse products & place orders via WhatsApp.</p>
+            <h3 className="font-semibold text-sm mb-1">Public Service Catalog</h3>
+            <p className="text-emerald-100 text-xs mb-4">Share with homeowners to browse maintenance services and book an appointment through Salla.</p>
             <button
               onClick={goMenu}
               className="flex items-center gap-2 bg-white text-emerald-700 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-emerald-50 transition-colors w-full justify-center"
             >
               <ExternalLink className="w-4 h-4" />
-              View Menu
+              View Service Catalog
             </button>
           </div>
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
@@ -390,7 +390,7 @@ function OrdersSection({ orders }: { orders: Order[] }) {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
+      <h1 className="text-2xl font-bold text-gray-900">Service Requests</h1>
       <div className="flex flex-wrap gap-2">
         {(['all', 'pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery', 'delivered', 'completed', 'cancelled'] as const).map(f => (
           <button
@@ -690,7 +690,7 @@ function InventorySection({ products, onRefresh }: { products: Product[]; onRefr
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gray-900">Inventory & Products</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Salla Service Catalog</h1>
         <div className="flex items-center gap-2">
           <button onClick={downloadTemplate} className="text-xs px-3 py-1.5 rounded-lg font-medium bg-white border border-gray-200 text-gray-600 hover:border-emerald-400 transition-colors">
             Download Template
