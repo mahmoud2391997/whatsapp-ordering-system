@@ -18,9 +18,6 @@ dist-ssr
 .env.production
 .env.staging
 
-# Prisma
-prisma/migrations/**/migration_lock.toml
-
 .vscode/*
 !.vscode/extensions.json
 .idea

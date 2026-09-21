@@ -1,6 +1,6 @@
 // ─── DB-aware Data Access Layer ────────────────────────────────────
 // Every read here first checks whether the database is reachable.
-// If it isn't, we return realistic dummy data so the UI still renders.
+// Local development falls back to demo rows. Production returns empty data.
 
 import { prisma } from './db';
 import {
@@ -18,6 +18,19 @@ let cachedActive: boolean | null = null;
 let lastCheck = 0;
 const CHECK_INTERVAL_MS = 10_000;
 const QUERY_TIMEOUT_MS = 2_000;
+
+function offline<T>(demo: T, empty: T): T {
+  return process.env.NODE_ENV === 'production' ? empty : demo;
+}
+
+const EMPTY_INTEGRATIONS: IntegrationsData = {
+  whatsappEvents: [],
+  hyperpayEvents: [],
+  geideaEvents: [],
+  tamaraEvents: [],
+  recentLogs: [],
+  txnCount: 0,
+};
 
 export async function isDbActive(): Promise<boolean> {
   if (cachedActive !== null && Date.now() - lastCheck < CHECK_INTERVAL_MS) {
@@ -41,27 +54,27 @@ export async function isDbActive(): Promise<boolean> {
 }
 
 export async function getProducts(): Promise<Product[]> {
-  if (!(await isDbActive())) return DUMMY_PRODUCTS;
+  if (!(await isDbActive())) return offline(DUMMY_PRODUCTS, []);
   try {
     const products = await prisma.product.findMany({ orderBy: { category: 'asc' } });
     return products.map(mapProduct);
   } catch {
-    return DUMMY_PRODUCTS;
+    return offline(DUMMY_PRODUCTS, []);
   }
 }
 
 export async function getCustomers(): Promise<Customer[]> {
-  if (!(await isDbActive())) return DUMMY_CUSTOMERS;
+  if (!(await isDbActive())) return offline(DUMMY_CUSTOMERS, []);
   try {
     const customers = await prisma.customer.findMany({ orderBy: { name: 'asc' } });
     return customers.map(mapCustomer);
   } catch {
-    return DUMMY_CUSTOMERS;
+    return offline(DUMMY_CUSTOMERS, []);
   }
 }
 
 export async function getOrders(): Promise<Order[]> {
-  if (!(await isDbActive())) return DUMMY_ORDERS;
+  if (!(await isDbActive())) return offline(DUMMY_ORDERS, []);
   try {
     const [orders, orderItems] = await Promise.all([
       prisma.order.findMany({ orderBy: { createdAt: 'desc' } }),
@@ -81,12 +94,12 @@ export async function getOrders(): Promise<Order[]> {
       return mapped;
     });
   } catch {
-    return DUMMY_ORDERS;
+    return offline(DUMMY_ORDERS, []);
   }
 }
 
 export async function getConversations(): Promise<Conversation[]> {
-  if (!(await isDbActive())) return DUMMY_CONVERSATIONS;
+  if (!(await isDbActive())) return offline(DUMMY_CONVERSATIONS, []);
   try {
     const [conversations, messages] = await Promise.all([
       prisma.conversation.findMany({ orderBy: { lastActivity: 'desc' } }),
@@ -106,22 +119,22 @@ export async function getConversations(): Promise<Conversation[]> {
       return mapped;
     });
   } catch {
-    return DUMMY_CONVERSATIONS;
+    return offline(DUMMY_CONVERSATIONS, []);
   }
 }
 
 export async function getMenuPages(): Promise<MenuPage[]> {
-  if (!(await isDbActive())) return DUMMY_MENU_PAGES;
+  if (!(await isDbActive())) return offline(DUMMY_MENU_PAGES, []);
   try {
     const pages = await prisma.menuPage.findMany({ orderBy: { createdAt: 'desc' } });
     return pages.map(mapMenuPage);
   } catch {
-    return DUMMY_MENU_PAGES;
+    return offline(DUMMY_MENU_PAGES, []);
   }
 }
 
 export async function getMenuPageBySlug(slug: string): Promise<MenuPage | null> {
-  const dummy = () => DUMMY_MENU_PAGES.find(p => p.slug === slug || p.id === slug) ?? null;
+  const dummy = () => (process.env.NODE_ENV === 'production' ? null : DUMMY_MENU_PAGES.find(p => p.slug === slug || p.id === slug) ?? null);
   if (!(await isDbActive())) return dummy();
   try {
     const page = await prisma.menuPage.findUnique({ where: { slug } })
@@ -164,14 +177,14 @@ const DUMMY_LOGS: IntegrationsData['recentLogs'] = DUMMY_SYSTEM_LOGS.map(l => ({
 
 export async function getIntegrationsData(): Promise<IntegrationsData> {
   if (!(await isDbActive())) {
-    return {
+    return offline({
       whatsappEvents: DUMMY_WEBHOOKS,
       hyperpayEvents: [],
       geideaEvents: [],
       tamaraEvents: [],
       recentLogs: DUMMY_LOGS,
       txnCount: DUMMY_TRANSACTIONS.length,
-    };
+    }, EMPTY_INTEGRATIONS);
   }
   try {
     const [txnCount, whatsappEvents, hyperpayEvents, geideaEvents, tamaraEvents, recentLogs] = await Promise.all([
@@ -185,13 +198,13 @@ export async function getIntegrationsData(): Promise<IntegrationsData> {
 
     return { whatsappEvents, hyperpayEvents, geideaEvents, tamaraEvents, recentLogs, txnCount };
   } catch {
-    return {
+    return offline({
       whatsappEvents: DUMMY_WEBHOOKS,
       hyperpayEvents: [],
       geideaEvents: [],
       tamaraEvents: [],
       recentLogs: DUMMY_LOGS,
       txnCount: DUMMY_TRANSACTIONS.length,
-    };
+    }, EMPTY_INTEGRATIONS);
   }
 }

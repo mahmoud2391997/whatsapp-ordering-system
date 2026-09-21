@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   LayoutDashboard, ShoppingBag, Users, Package, MessageSquare,
   TrendingUp, Truck, Clock, CheckCircle2, XCircle, ChevronRight,
-  Leaf, Bell, Search, Menu, X, AlertCircle, ExternalLink,
+  Leaf, Search, Menu, X, AlertCircle, ExternalLink,
   Plug, Copy, Check, Activity, CreditCard, Wallet,
   UserPlus, Loader2, Link2, Plus,
 } from 'lucide-react';
@@ -81,6 +81,10 @@ export default function DashboardPage() {
   const loadData = useCallback(async () => {
     try {
       const res = await fetch('/api/data');
+      if (res.status === 401 || res.status === 503) {
+        window.location.href = '/login';
+        return;
+      }
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       setProducts(data.products ?? []);
@@ -181,6 +185,16 @@ export default function DashboardPage() {
             <ExternalLink className="w-4 h-4 shrink-0" />
             View Menu Page
           </Link>
+          <button
+            type="button"
+            onClick={async () => {
+              await fetch('/api/auth/logout', { method: 'POST' });
+              window.location.href = '/login';
+            }}
+            className="mt-1 w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-emerald-300 hover:bg-emerald-800 hover:text-white transition-colors"
+          >
+            Sign out
+          </button>
         </div>
       </aside>
 
@@ -188,7 +202,7 @@ export default function DashboardPage() {
         {!dbActive && (
           <div className="bg-amber-500 text-white text-xs font-medium px-4 py-1.5 flex items-center gap-2 justify-center">
             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            Database unavailable — showing demo data.
+            Database unavailable. Live orders stay hidden until PostgreSQL responds.
           </div>
         )}
         <header className="bg-white border-b border-gray-200 px-4 sm:px-6 h-14 flex items-center gap-3 sticky top-0 z-20">
@@ -200,10 +214,6 @@ export default function DashboardPage() {
             <input className="w-full bg-gray-100 rounded-lg pl-9 pr-3 py-1.5 text-sm text-gray-600 placeholder-gray-400 outline-none focus:bg-white focus:ring-2 focus:ring-emerald-300 transition" placeholder="Search orders, customers..." />
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <button className="relative text-gray-500 hover:text-gray-700">
-              <Bell className="w-5 h-5" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">2</span>
-            </button>
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-sm font-bold">A</div>
               <span className="text-sm font-medium text-gray-700 hidden sm:block">Admin</span>
@@ -238,17 +248,19 @@ function OverviewSection({
   products: Product[];
 }) {
   const stats = [
-    { label: "Today's Revenue", value: `${totalRevenue.toLocaleString()} EGP`, change: '+12%', icon: TrendingUp, color: 'bg-emerald-500' },
-    { label: 'Total Orders', value: orders.length.toString(), change: '+3 today', icon: ShoppingBag, color: 'bg-blue-500' },
-    { label: 'Pending Orders', value: pendingOrders.toString(), change: 'Need action', icon: Clock, color: 'bg-amber-500' },
-    { label: 'Active Customers', value: activeCustomers.toString(), change: '+2 new', icon: Users, color: 'bg-purple-500' },
+    { label: 'Recorded Revenue', value: `${totalRevenue.toLocaleString()} EGP`, change: 'All orders', icon: TrendingUp, color: 'bg-emerald-500' },
+    { label: 'Total Orders', value: orders.length.toString(), change: 'On file', icon: ShoppingBag, color: 'bg-blue-500' },
+    { label: 'Pending Orders', value: pendingOrders.toString(), change: pendingOrders ? 'Need action' : 'Clear', icon: Clock, color: 'bg-amber-500' },
+    { label: 'Customers', value: activeCustomers.toString(), change: 'On file', icon: Users, color: 'bg-purple-500' },
   ];
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Dashboard Overview</h1>
-        <p className="text-gray-500 text-sm mt-0.5">Sunday, 13 July 2026</p>
+        <p className="text-gray-500 text-sm mt-0.5" suppressHydrationWarning>
+          {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+        </p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

@@ -77,7 +77,7 @@ src/app/menu/[slug]/page.tsx                Slug-based menu removed
 - **API Endpoints**: All serverless functions deployed
 
 ### Environment Variables Configured:
-- ✅ `WHATSAPP_PHONE_NUMBER_ID`: 1146219945250452
+- ✅ `WHATSAPP_PHONE_NUMBER_ID`: set in the server environment
 - ✅ `WHATSAPP_ACCESS_TOKEN`: [Your token]
 - ✅ `NEXT_PUBLIC_SUPABASE_URL`: [Configured]
 - ✅ `SUPABASE_SERVICE_ROLE_KEY`: [Configured]
@@ -137,7 +137,7 @@ products (id, name, price_retail, price_shop, price_wholesale) ◄┘
 
 ### WhatsApp API:
 ```
-Phone Number ID: 1146219945250452
+Phone Number ID: set in the server environment
 API Version: v25.0
 Template: jaspers_market_order_confirmation_v1
 Parameters: {customer_name, order_id, date}

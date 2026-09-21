@@ -1,247 +1,45 @@
-# Deployment & Database Setup Guide
+# Deployment
 
-## Status Summary
+Production runs as a Next.js app on the VPS, with PostgreSQL on the same machine and PM2 keeping the process up. Copy `.env.example` to `/var/www/fresh-greens/.env` and replace every placeholder. Do not commit that file.
 
-✅ **Code Deployed to Vercel**: https://whatsapp-ordering-system-teal.vercel.app
-✅ **Git Repository Updated**: All code pushed to `whatsapp-menu-integration` branch
-✅ **Migrations Created**: SQL migrations ready for Supabase
-⏳ **Database Seeding**: Ready to run once migrations are applied
+## Required environment
 
----
+- `APP_URL` — public HTTPS origin, no trailing slash
+- `ADMIN_PASSWORD` — at least 12 characters; this signs the dashboard session
+- `DATABASE_URL` and `DIRECT_DATABASE_URL` — PostgreSQL URL for a role that **owns** the tables
+- `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`
+- `SALLA_CLIENT_ID`, `SALLA_CLIENT_SECRET`, `SALLA_WEBHOOK_SECRET`, `SALLA_TOKEN_ENCRYPTION_KEY`
+- `PAYMENT_WEBHOOK_SECRET` when card or BNPL webhooks are enabled
 
-## Step 1: Provision the Production Database
+WhatsApp webhook: `{APP_URL}/api/webhooks/whatsapp`  
+Salla redirect: `{APP_URL}/api/salla/callback`  
+Salla webhook: `{APP_URL}/api/webhooks/salla`
 
-For a database running on the same VPS, install PostgreSQL with the VPS setup
-script, then create a dedicated database and user:
+## First-time database
 
 ```bash
 sudo -u postgres createuser --pwprompt fresh_greens
 sudo -u postgres createdb -O fresh_greens fresh_greens
 ```
 
-Set these values in `/var/www/fresh-greens/.env`:
+The app user must own the tables. Row-level security is enabled and the old public anon policies are removed, so a non-owner role cannot read orders.
 
-```dotenv
-DATABASE_URL=postgresql://fresh_greens:<password>@127.0.0.1:5432/fresh_greens
-DIRECT_DATABASE_URL=postgresql://fresh_greens:<password>@127.0.0.1:5432/fresh_greens
-```
+## Release
 
-Initialize the base schema once after cloning the application:
+On the server, from `/var/www/fresh-greens`:
 
 ```bash
-npx prisma generate
-npx prisma db push
+bash deploy.sh
 ```
 
-Future deployments use `npx prisma migrate deploy` through `deploy.sh`.
+That pulls `main`, installs dependencies, runs `npx prisma migrate deploy`, builds Next.js, and reloads PM2 from `ecosystem.config.cjs`.
 
-## Step 2: Prisma migrations on the VPS
+Check `https://your-domain.example/api/health`. `status` is `healthy` only when Postgres, `pg_trgm`, and `ADMIN_PASSWORD` are ready. Salla can stay disconnected without failing the check. The response does not include database errors.
 
-This production path uses PostgreSQL on the Hostinger VPS. After setting `DATABASE_URL` and `DIRECT_DATABASE_URL`, run:
+## Dashboard
 
-```bash
-npm ci
-npx prisma generate
-npx prisma migrate deploy
-npm run build
-```
+`/dashboard` and the admin APIs require the password. Customer checkout (`/api/checkout`), the menu, and the signed webhooks stay public. In production a database outage shows an empty dashboard instead of demo orders.
 
-The webhook URL is `https://yourdomain.com/api/webhooks/whatsapp`. Configure the WhatsApp verify token and app secret in `.env`; do not expose them in the browser.
+## Local development
 
-## Step 3: Supabase Migrations (Only If Using Supabase)
-
-The project includes three migrations that create the complete database schema:
-
-1. **`20260715013747_create_fresh_greens_schema.sql`** — Core tables (products, customers, orders, conversations, messages)
-2. **`20260715015829_add_menu_pages_table.sql`** — Menu pages table for customer-specific ordering
-3. **`20260715120000_seed_products.sql`** — Pre-seed 15 products (vegetables, fruits, herbs)
-
-### To apply migrations:
-
-#### Option A: Using Supabase CLI (Recommended)
-
-```bash
-# Install Supabase CLI if not already installed
-npm install -g supabase
-
-# Link your project
-supabase link --project-ref <your-project-ref>
-
-# Push migrations to Supabase
-supabase db push
-```
-
-#### Option B: Manual via Supabase Dashboard
-
-1. Go to your Supabase project → **SQL Editor**
-2. Create a new query
-3. Copy the contents of each migration file (in order):
-   - `supabase/migrations/20260715013747_create_fresh_greens_schema.sql`
-   - `supabase/migrations/20260715015829_add_menu_pages_table.sql`
-   - `supabase/migrations/20260715120000_seed_products.sql`
-4. Run each query (copy → paste → run)
-
-**Note**: The products migration will pre-populate 15 products with tiered pricing
-
----
-
-## Step 2: Seed Test Data
-
-Once migrations are applied, seed the database with realistic test data (customers, conversations, orders):
-
-```bash
-# From project root
-node --env-file-if-exists=/vercel/share/.env.project scripts/seed-database.js
-
-# OR if you have .env.local set up locally:
-node scripts/seed-database.js
-```
-
-This will create:
-- **3 test customers**: retail buyer, shop owner, restaurant manager
-- **9 menu pages**: 3 per customer for multiple ordering sessions
-- **3 conversations**: completed, active, and waiting statuses
-- **7 messages**: realistic order requests and bot replies
-- **4 orders**: 2 completed (retail), 1 completed (shop), 1 pending (restaurant)
-- **16 order items**: with realistic quantities and tiered pricing
-
-**Expected Output**:
-```
-🌱 Starting database seeding...
-✓ Tables exist
-📝 Seeding customers...
-✓ Seeded 3 customers
-📋 Seeding menu pages...
-✓ Seeded 9 menu pages
-💬 Seeding conversations...
-✓ Seeded 3 conversations
-💬 Seeding messages...
-✓ Seeded 7 messages
-📦 Seeding orders...
-✓ Seeded 4 orders
-🛒 Seeding order items...
-✓ Seeded 16 order items
-✅ Database seeding completed successfully!
-```
-
----
-
-## Step 3: Set Environment Variables
-
-Ensure these environment variables are set in your Vercel project:
-
-### Required:
-- `NEXT_PUBLIC_SUPABASE_URL` — Your Supabase URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key
-- `SUPABASE_SERVICE_ROLE_KEY` — Supabase service role key
-- `SUPABASE_JWT_SECRET` — JWT secret for auth
-- `WHATSAPP_PHONE_NUMBER_ID` — Your WhatsApp phone number ID (1146219945250452)
-- `WHATSAPP_ACCESS_TOKEN` — Your WhatsApp Business API token
-- `WHATSAPP_VERIFY_TOKEN` — Random webhook verification secret
-- `WHATSAPP_APP_SECRET` — Meta app secret used to verify webhook signatures
-- `DATABASE_URL` and `DIRECT_DATABASE_URL` — Local VPS PostgreSQL connection strings
-
-### Set in Vercel Dashboard:
-1. Go to your Vercel project → **Settings** → **Environment Variables**
-2. Add each variable (only existing ones were already added)
-3. Redeploy: `npx vercel deploy --prod`
-
----
-
-## Database Schema Overview
-
-### Tables Created:
-
-1. **products** (15 items pre-seeded)
-   - Tiered pricing: retail, shop, wholesale
-   - Categories: vegetables, fruits, herbs
-
-2. **customers** (3 test customers)
-   - name, phone (unique), type, location, total_orders
-
-3. **menu_pages** (9 per-customer pages)
-   - slug, customer_name, phone, customer_type
-
-4. **conversations** (3 active conversations)
-   - customer_name, phone, status, last_activity
-
-5. **messages** (7 messages)
-   - conversation_id, sender (customer/bot), text, type
-
-6. **orders** (4 test orders)
-   - customer_name, total, status, payment_status
-
-7. **order_items** (16 line items)
-   - order_id, product_name, qty, unit, unit_price
-
----
-
-## WhatsApp Integration Setup
-
-### Webhook Already Configured:
-✅ Bot detects orders → Creates menu page → Sends WhatsApp link to customer
-✅ Customer reviews menu → Places order → Appears in dashboard
-✅ Business confirms order → Sends WhatsApp template confirmation
-
-### Template Configuration:
-- Template Name: `jaspers_market_order_confirmation_v1`
-- API Version: v25.0
-- Parameters: Customer name, Order ID, Date
-
----
-
-## Testing the System
-
-### 1. Test Menu Pages
-Visit: `https://whatsapp-ordering-system-teal.vercel.app/menu/[customer-id]`
-
-Use one of the test menu page IDs from seeded data
-
-### 2. Test Dashboard
-Visit: `https://whatsapp-ordering-system-teal.vercel.app/dashboard`
-
-See test orders and confirm them to test WhatsApp integration
-
-### 3. Test WhatsApp (Manual)
-Send a message to your WhatsApp Business account with a food order, and the bot should:
-1. Parse your order with Gemini AI
-2. Create a menu page with your unique customer ID
-3. Send you the menu link via WhatsApp
-
----
-
-## Troubleshooting
-
-### Tables not found error:
-→ Migrations haven't been applied. Run Step 1 above.
-
-### Seed script fails:
-→ Ensure all migrations are applied first
-→ Check environment variables are set correctly
-→ Verify Supabase service role key has sufficient permissions
-
-### WhatsApp not sending messages:
-→ Verify `WHATSAPP_PHONE_NUMBER_ID` and `WHATSAPP_ACCESS_TOKEN` are set
-→ Check WhatsApp Business account is properly configured
-→ Ensure template `jaspers_market_order_confirmation_v1` exists in your account
-
-### Menu page returns 404:
-→ Use valid customer-id from seeded data
-→ Check menu_pages table has entries
-
----
-
-## Next Steps
-
-1. ✅ Apply migrations to Supabase
-2. ✅ Seed database with test data
-3. ✅ Verify WhatsApp credentials are set
-4. ✅ Test the dashboard and menu pages
-5. ✅ Send a test message to WhatsApp bot
-6. ✅ Confirm order in dashboard and verify WhatsApp confirmation sent
-
----
-
-**Deployed Production URL**: https://whatsapp-ordering-system-teal.vercel.app
-**GitHub Branch**: whatsapp-menu-integration
-**Last Updated**: July 15, 2026
+Leave `ADMIN_PASSWORD` unset to open the dashboard without a login. Set it when you want to exercise the production gate. `npm test` runs the unit tests. `npm run build` is the same build the server runs.

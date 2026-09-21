@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'fresh-greens',
-      script: 'node_modules/.bin/next',
+      script: 'node_modules/next/dist/bin/next',
       args: 'start -p 3000',
       cwd: '/var/www/fresh-greens',
       instances: 1,
@@ -14,7 +14,6 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3000,
       },
-      env_file: '/var/www/fresh-greens/.env',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       error_file: '/var/log/pm2/fresh-greens-error.log',
       out_file: '/var/log/pm2/fresh-greens-out.log',

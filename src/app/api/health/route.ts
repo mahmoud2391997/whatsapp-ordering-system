@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSallaAuthorization } from '@/lib/salla';
+import { adminPasswordConfigured } from '@/lib/admin-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,8 +13,8 @@ export async function GET() {
   try {
     await prisma.$queryRaw`SELECT 1 AS ok`;
     checks.database = { ok: true, latencyMs: Date.now() - dbStart };
-  } catch (err) {
-    checks.database = { ok: false, error: String(err), latencyMs: Date.now() - dbStart };
+  } catch {
+    checks.database = { ok: false, error: 'unavailable', latencyMs: Date.now() - dbStart };
   }
 
   // 2. pg_trgm extension
@@ -22,8 +23,8 @@ export async function GET() {
       SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') AS exists
     `;
     checks.pg_trgm = { ok: !!ext[0]?.exists };
-  } catch (err) {
-    checks.pg_trgm = { ok: false, error: String(err) };
+  } catch {
+    checks.pg_trgm = { ok: false, error: 'unavailable' };
   }
 
   // 3. Fuzzy match query
@@ -32,25 +33,31 @@ export async function GET() {
       SELECT similarity('طماطم', 'طماطم') AS sim
     `;
     checks.fuzzy_match = { ok: (sim[0]?.sim ?? 0) > 0 };
-  } catch (err) {
-    checks.fuzzy_match = { ok: false, error: String(err) };
+  } catch {
+    checks.fuzzy_match = { ok: false, error: 'unavailable' };
   }
 
   // 4. Product count
   const productStart = Date.now();
   try {
-    const count = await prisma.product.count();
+    await prisma.product.count();
     checks.product_count = { ok: true, latencyMs: Date.now() - productStart };
-  } catch (err) {
-    checks.product_count = { ok: false, error: String(err), latencyMs: Date.now() - productStart };
+  } catch {
+    checks.product_count = { ok: false, error: 'unavailable', latencyMs: Date.now() - productStart };
   }
 
   try {
     const auth = await getSallaAuthorization();
     checks.salla = { ok: Boolean(auth), error: auth ? undefined : 'Salla store is not connected' };
-  } catch (err) {
-    checks.salla = { ok: false, error: String(err) };
+  } catch {
+    checks.salla = { ok: false, error: 'unavailable' };
   }
+
+  const adminRequired = process.env.NODE_ENV === 'production';
+  checks.admin = {
+    ok: !adminRequired || adminPasswordConfigured(),
+    error: adminRequired && !adminPasswordConfigured() ? 'ADMIN_PASSWORD is missing' : undefined,
+  };
 
   const required = Object.entries(checks).filter(([key]) => key !== 'salla');
   const allOk = required.every(([, c]) => c.ok);

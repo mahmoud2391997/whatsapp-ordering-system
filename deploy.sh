@@ -28,8 +28,8 @@ npm ci --production=false
 echo "🔧 Generating Prisma client..."
 npx prisma generate
 
-# 4. Run database migrations (pg_trgm + any new migrations)
-# The base schema is initialized once during VPS provisioning with `prisma db push`.
+# 4. Apply Prisma migrations, including the baseline schema on a fresh database.
+# The database role in DATABASE_URL must own these tables (RLS is enabled).
 echo "🗄️  Running database migrations..."
 npx prisma migrate deploy
 
@@ -39,7 +39,7 @@ npm run build
 
 # 6. Reload PM2 (not restart — preserves in-flight requests)
 echo "🔄 Reloading PM2..."
-pm2 reload ecosystem.config.js --env production
+pm2 reload ecosystem.config.cjs --env production
 
 # 7. Save PM2 process list (survives reboot)
 pm2 save
